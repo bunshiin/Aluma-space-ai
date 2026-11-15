@@ -98,6 +98,7 @@ export async function createSolarSystemScene(container, modelUrl, onProgress, de
     getAspect: () => camera.aspect,
     getMarsRig: () => getOrbitRig('MARS'),
     mars_radius_units: getSolarBodyConfig('MARS').target_radius_units,
+    onExitComplete: (targetId) => handleFocusTarget(targetId),
   });
   const lunarSurface = createLunarSurfaceController({
     deps: loadedDeps,
@@ -113,6 +114,7 @@ export async function createSolarSystemScene(container, modelUrl, onProgress, de
     getAspect: () => camera.aspect,
     getMoonRig: () => getOrbitRig('MOON'),
     moon_radius_units: getSolarBodyConfig('MOON').target_radius_units,
+    onExitComplete: (targetId) => handleFocusTarget(targetId),
   });
   const marsPhotoSatellite = createMarsPhotoSatelliteController({ marsSurface, spacecraftTracker });
 
@@ -139,9 +141,19 @@ export async function createSolarSystemScene(container, modelUrl, onProgress, de
     }
   }
 
-  // Yüzey hedefleri (Mars roverları veya Apollo Ay Modülü) ilgili gezegen/uyduya dalış başlatır.
+  // Yüzey hedefleri (Mars roverları veya Apollo Ay Modülü) ilgili gezegen/uyduya dalış başlatır; başka gezegendeyken önce çıkış yapılır.
   function handleFocusTarget(targetName) {
     const resolved = getCameraTarget(targetName);
+    if (marsSurface.isCameraLocked() && !resolved.surface_site_id && resolved.id !== MARS_PHOTO_SATELLITE_ID) {
+      marsSurface.handleExitRequest(resolved.id);
+      dispatchFocusNotification(resolved.id);
+      return resolved;
+    }
+    if (lunarSurface.isCameraLocked() && !resolved.lunar_site_id) {
+      lunarSurface.handleExitRequest(resolved.id);
+      dispatchFocusNotification(resolved.id);
+      return resolved;
+    }
     if (resolved.surface_site_id && marsSurface.handleSurfaceRequest(resolved.surface_site_id)) {
       dispatchFocusNotification(resolved.id);
       return resolved;
@@ -152,16 +164,6 @@ export async function createSolarSystemScene(container, modelUrl, onProgress, de
     }
     if (resolved.id === MARS_PHOTO_SATELLITE_ID) {
       marsPhotoSatellite.handleMarsPhotoRequest({ target: targetName });
-      dispatchFocusNotification(resolved.id);
-      return resolved;
-    }
-    if (marsSurface.isCameraLocked()) {
-      marsSurface.handleExitRequest(resolved.id);
-      dispatchFocusNotification(resolved.id);
-      return resolved;
-    }
-    if (lunarSurface.isCameraLocked()) {
-      lunarSurface.handleExitRequest(resolved.id);
       dispatchFocusNotification(resolved.id);
       return resolved;
     }

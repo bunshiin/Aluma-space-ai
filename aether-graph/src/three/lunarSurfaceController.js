@@ -197,6 +197,11 @@ export function createLunarSurfaceController(ctx) {
     if (controls && frame) controls.target.set(frame.center.x, frame.center.y, frame.center.z);
     if (controls) controls.enabled = true;
     cameraController.handleInputEnabled(true);
+    if (typeof ctx.onExitComplete === 'function' && exit_target_id !== MOON_TARGET_ID) {
+      handleState('ORBIT');
+      ctx.onExitComplete(exit_target_id);
+      return;
+    }
     cameraController.handleFocusTarget(exit_target_id);
     handleState('ORBIT');
   }

@@ -103,8 +103,14 @@ describe('spacePhysics - Sözleşme, Fizik ve Matematik Testleri', () => {
     const base = calculatePlanetComparison('EARTH', 'MOON');
     assert.ok(Math.abs(base.radius_ratio - 6371 / 1737.4) < 1e-4);
     assert.equal(base.primary_gravity_ms2, 9.80665);
+    assert.equal(base.distance_km, 384400);
     assert.equal('mass_kg' in base, false);
     assert.equal('primary_fall_time_s' in base, false);
+
+    assert.ok(calculatePlanetComparison('EARTH', 'MARS').distance_km > 70000000);
+    assert.equal(calculatePlanetComparison('IO', 'EUROPA').distance_km, 249400);
+    assert.equal(calculatePlanetComparison('EARTH', 'EARTH').distance_km, 0);
+    assert.ok(calculatePlanetComparison('SATURN', 'CERES').distance_km > 0);
 
     const full = calculatePlanetComparison('JUPITER', 'PLUTO', { mass_kg: 70, height_m: 10, age_years: 20 });
     assert.equal(full.primary_fall_time_s, calculateFallTime(10, 'JUPITER'));

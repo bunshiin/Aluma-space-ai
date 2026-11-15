@@ -213,3 +213,23 @@ test("renderPopup ve closeAllPanels görünürlüğü doğru yönetir", () => {
   assert.equal(popupElements.container.getAttribute("aria-hidden"), "true");
   assert.equal(extraPanel.classList.contains("is-hidden"), true);
 });
+
+test("renderSidePanel camera_target teknik alanını yan panel gövdesinde göstermez", () => {
+  const doc = createMockDocument();
+  const sidePanelElements = {
+    container: createMockElement("aside", doc, ["is-hidden"]),
+    titleEl: createMockElement("h2", doc),
+    bodyEl: createMockElement("div", doc),
+    actionsEl: createMockElement("div", doc)
+  };
+
+  renderSidePanel(sidePanelElements, {
+    title: "apollo 11",
+    query: "apollo 11",
+    camera_target: "APOLLO_LUNAR_MODULE"
+  });
+
+  assert.equal(findByClass(sidePanelElements.bodyEl, "ag-comparison-grid").length, 0);
+  assert.equal(findByClass(sidePanelElements.bodyEl, "ag-comparison-row").length, 0);
+  assert.equal(sidePanelElements.bodyEl.classList.contains("is-hidden"), true);
+});

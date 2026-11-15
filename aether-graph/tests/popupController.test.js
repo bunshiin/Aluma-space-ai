@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { initApp } from "../src/app.js";
-import { resetActionRouterState } from "../src/ui/actionRouter.js";
+import { configureActionRouter, handleActionRouter, resetActionRouterState } from "../src/ui/actionRouter.js";
 import { enrichRoutePayload } from "../src/ui/contractBridge.js";
 import {
   createFallbackSpaceImageDataUri,
@@ -218,5 +218,70 @@ test("enrichRoutePayload getSpaceData görsellerini ve fallback SVG verisini ekl
   );
   assert.match(fallbackPopup.parameters.image_url, /^data:image\/svg\+xml/);
   assert.match(createFallbackSpaceImageDataUri("Test", "SOLAR_FLARE"), /SOLAR_FLARE/);
+});
+
+test("3D sahne geçişlerinde mevcut pop-up hemen kapanır ve yeni pop-up kamera hedefe varınca açılır", async () => {
+  resetActionRouterState();
+  const doc = createMockDom();
+  const bus = new EventTarget();
+  const prevAdd = globalThis.addEventListener;
+  const prevRemove = globalThis.removeEventListener;
+  const prevDispatch = globalThis.dispatchEvent;
+  globalThis.addEventListener = (...args) => bus.addEventListener(...args);
+  globalThis.removeEventListener = (...args) => bus.removeEventListener(...args);
+  globalThis.dispatchEvent = (ev) => bus.dispatchEvent(ev);
+
+  try {
+    configureActionRouter({
+      doc,
+      create3DMissionScene: async () => ({ destroy() {} })
+    });
+
+    const toMars = handleActionRouter({
+      action_type: "OPEN_POPUP",
+      template_id: "NONE",
+      parameters: { model_url: "SOLAR_SYSTEM", camera_target: "MARS", title: "Mars", image_url: "https://example.org/mars.jpg" },
+      speech_text: "Mars'a gidiliyor."
+    });
+    await toMars.scene_promise;
+    assert.equal(doc.getElementById("popup-container").classList.contains("is-hidden"), true, "uçuş bitmeden Mars pop-up'ı açılmamalı");
+
+    bus.dispatchEvent(new CustomEvent("ag:focus-arrived", { detail: { target: "MARS" } }));
+    assert.equal(doc.getElementById("popup-container").classList.contains("is-hidden"), false);
+    assert.equal(doc.getElementById("popup-title").textContent, "Mars");
+
+    handleActionRouter({
+      action_type: "OPEN_POPUP",
+      template_id: "NONE",
+      parameters: { model_url: "SOLAR_SYSTEM", camera_target: "MOON", title: "Ay", image_url: "https://example.org/moon.jpg" },
+      speech_text: "Ay'a geçiliyor."
+    });
+    assert.equal(doc.getElementById("popup-container").classList.contains("is-hidden"), true, "Mars'tan çıkarken eski pop-up hemen kapanmalı");
+
+    bus.dispatchEvent(new CustomEvent("ag:focus-arrived", { detail: { target: "JUPITER" } }));
+    assert.equal(doc.getElementById("popup-container").classList.contains("is-hidden"), true, "yanlış hedef varışında açılmamalı");
+
+    bus.dispatchEvent(new CustomEvent("ag:focus-arrived", { detail: { target: "MOON" } }));
+    assert.equal(doc.getElementById("popup-container").classList.contains("is-hidden"), false, "Ay'a varınca pop-up açılmalı");
+    assert.equal(doc.getElementById("popup-title").textContent, "Ay");
+
+    handleActionRouter({
+      action_type: "OPEN_POPUP",
+      template_id: "NONE",
+      parameters: { model_url: "SOLAR_SYSTEM", camera_target: "APOLLO_LUNAR_MODULE", title: "Apollo 11", image_url: "https://example.org/a11.jpg" },
+      speech_text: "Apollo 11'e iniliyor."
+    });
+    assert.equal(doc.getElementById("popup-container").classList.contains("is-hidden"), true);
+    bus.dispatchEvent(new CustomEvent("ag:lunar-surface-state", { detail: { surface_state: "LANDING" } }));
+    assert.equal(doc.getElementById("popup-container").classList.contains("is-hidden"), true);
+    bus.dispatchEvent(new CustomEvent("ag:lunar-surface-state", { detail: { surface_state: "SURFACE" } }));
+    assert.equal(doc.getElementById("popup-container").classList.contains("is-hidden"), false);
+    assert.equal(doc.getElementById("popup-title").textContent, "Apollo 11");
+  } finally {
+    resetActionRouterState();
+    globalThis.addEventListener = prevAdd;
+    globalThis.removeEventListener = prevRemove;
+    globalThis.dispatchEvent = prevDispatch;
+  }
 });
 

@@ -27,7 +27,7 @@ export async function exportHomeworkPdf(printableElement, options = {}) {
     margin: 12,
     filename,
     image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, backgroundColor: options.backgroundColor || "#0c121e" },
+    html2canvas: { scale: 2, backgroundColor: "#0c121e" },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
   };
 

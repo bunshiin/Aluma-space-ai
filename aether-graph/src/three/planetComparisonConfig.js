@@ -118,10 +118,14 @@ export function calculateComparisonLayout(comparison, aspect = 16 / 9, vertical_
   const primaryModel_units = calculateModelRadiusUnits(comparison?.primary_object, primaryBody_units);
   const secondaryModel_units = calculateModelRadiusUnits(comparison?.secondary_object, secondaryBody_units);
 
-  const gap_units = Math.max(primaryModel_units, secondaryModel_units) * 0.55;
+  const gap_units = Math.max(primaryModel_units, secondaryModel_units) * 0.85;
   const totalWidth_units = primaryModel_units * 2 + gap_units + secondaryModel_units * 2;
   const primaryX_units = -totalWidth_units / 2 + primaryModel_units;
   const secondaryX_units = totalWidth_units / 2 - secondaryModel_units;
+  const start_x_units = primaryX_units + primaryModel_units;
+  const end_x_units = secondaryX_units - secondaryModel_units;
+  const mid_x_units = (start_x_units + end_x_units) / 2;
+  const distance_km = isPositiveNumber(comparison?.distance_km) ? comparison.distance_km : 0;
 
   const halfVertical_rad = (vertical_fov_deg * Math.PI) / 360;
   const safeAspect = isPositiveNumber(aspect) ? aspect : 16 / 9;
@@ -145,6 +149,7 @@ export function calculateComparisonLayout(comparison, aspect = 16 / 9, vertical_
   return {
     primary: createSlot(comparison?.primary_object, primaryBody_units, primaryModel_units, primaryX_units, secondaryBody_units),
     secondary: createSlot(comparison?.secondary_object, secondaryBody_units, secondaryModel_units, secondaryX_units, primaryBody_units),
+    distance_line: { start_x_units, end_x_units, mid_x_units, distance_km },
     camera_distance_units,
     // Kamera biraz aşağıya bakar: cisimler yukarı kayar, altlarındaki bilgi etiketlerine yer kalır
     look_at_units: [0, -halfHeight_units * LABEL_ROOM_LOOK_OFFSET, 0],

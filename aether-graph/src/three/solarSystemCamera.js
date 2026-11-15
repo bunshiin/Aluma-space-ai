@@ -201,12 +201,19 @@ export function createCameraController(threeLib, camera, controls, domElement, g
     return spheres;
   }
 
+  function dispatchFocusArrived() {
+    if (is_input_enabled && typeof globalThis.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+      globalThis.dispatchEvent(new CustomEvent('ag:focus-arrived', { detail: { target: active_focus.id } }));
+    }
+  }
+
   // Kameranın şu anki konumundan ve bakışından odağa yumuşak geçiş başlatır; ışınlanma yok
   function handleBeginTransition() {
     const end = getTransitionEnd(getBodyMap());
     if (!end) {
       transition = null;
       is_zooming_to_target = false;
+      dispatchFocusArrived();
       return;
     }
     const look = controls ? controls.target : desiredLookAt;
@@ -234,6 +241,7 @@ export function createCameraController(threeLib, camera, controls, domElement, g
       is_input_enabled &&
       (has_prev_body_pos || is_zooming_to_target)
     ) {
+      if (!is_zooming_to_target) dispatchFocusArrived();
       return active_focus;
     }
     active_focus = next_focus;
@@ -261,7 +269,10 @@ export function createCameraController(threeLib, camera, controls, domElement, g
       start_look.y + (end.look.y - start_look.y) * eased,
       start_look.z + (end.look.z - start_look.z) * eased
     );
-    if (progress >= 1) handleCancelTransition();
+    if (progress >= 1) {
+      handleCancelTransition();
+      dispatchFocusArrived();
+    }
     if (controls) {
       controls.target.copy(desiredLookAt);
       controls.update();
@@ -316,6 +327,7 @@ export function createCameraController(threeLib, camera, controls, domElement, g
     pointerDownX_px = event.clientX || 0;
     pointerDownY_px = event.clientY || 0;
     // Kullanıcı kamerayı tuttuysa otomatik geçiş onunla kavga etmesin
+    if (transition) dispatchFocusArrived();
     handleCancelTransition();
     // Patlama kalıcı olduğu için kamera kilidi açıkta kalmasın: kullanıcı tutunca kontrol ona geçer
     if (is_cinematic) {
@@ -365,6 +377,7 @@ export function createCameraController(threeLib, camera, controls, domElement, g
     }
 
     // Kullanıcı tekerlekle manuel zoom yaptığında otomatik kamera ve sinematik kilidini bırak
+    if (transition) dispatchFocusArrived();
     handleCancelTransition();
     if (is_cinematic) {
       is_cinematic = false;

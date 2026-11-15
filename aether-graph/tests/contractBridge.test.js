@@ -450,19 +450,21 @@ test("enrichRoutePayload Gemini zengin içerik verdiyse yönlendirme alanların�
   assert.equal(labels.includes("image_query"), false);
 });
 
-test("'ödevime ekle' komutu Gemini'ye gitmez, sahne parametresi taşımaz", async () => {
+test("apollo 11 gibi odak komutları boş görev yan paneli açmaz, FOCUS_OBJECT ile kamerayı odaklar", async () => {
   resetActionRouterState();
-  let geminiCalls = 0;
-  const bridge = createContractBridge({ doc: createMockDom(), contracts: { getRouteFromGemini: async () => { geminiCalls += 1; return null; } } });
-  const route = await bridge.resolveUserCommand("Ay yerçekimini ödevime ekle", true);
-  assert.equal(geminiCalls, 0);
-  assert.deepEqual(route, { action_type: "ADD_TO_HOMEWORK", template_id: "NONE", parameters: { query: "Ay yerçekimini ödevime ekle" }, speech_text: "", is_student_mode: true });
+  const doc = createMockDom();
+  const bridge = createContractBridge({ doc, contracts: {} });
 
-  const fromGemini = await enrichRoutePayload({
-    action_type: "ADD_TO_HOMEWORK", template_id: "GRAVITY_SIM",
-    parameters: { primary_object: "MOON", secondary_object: "MOON", model_url: "PLANET_COMPARISON", camera_target: "MOON" }
-  }, {}, "Ay yerçekimini kaydet");
-  assert.equal(fromGemini.action_type, "ADD_TO_HOMEWORK");
-  assert.equal(fromGemini.template_id, "NONE");
-  assert.deepEqual(fromGemini.parameters, { query: "Ay yerçekimini kaydet" });
+  const localRes = await bridge.dispatchUserCommand("apollo 11", false);
+  assert.equal(localRes.action_type, "FOCUS_OBJECT");
+  assert.equal(doc.getElementById("side-panel-container").classList.contains("is-hidden"), true);
+  assert.equal(doc.getElementById("scene-container").getAttribute("data-camera-target"), "APOLLO_LUNAR_MODULE");
+
+  const enrichedEmptySidePanel = await enrichRoutePayload({
+    action_type: "OPEN_SIDE_PANEL",
+    template_id: "NONE",
+    parameters: { title: "apollo 11", query: "apollo 11", camera_target: "APOLLO_LUNAR_MODULE", model_url: "SOLAR_SYSTEM" },
+    speech_text: "Apollo 11 ay modülü odaklandı."
+  }, {}, "apollo 11");
+  assert.equal(enrichedEmptySidePanel.action_type, "FOCUS_OBJECT");
 });

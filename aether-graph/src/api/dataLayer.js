@@ -12,7 +12,6 @@ import { fetchApodData, fetchIssPosition, fetchMarsRoverPhotos } from './liveSpa
 import { fetchNormalizedEonetEvents, getEonetCategoryId } from './eonetClient.js';
 import { fetchMarsOrbitalPhotos } from './marsOrbitalClient.js';
 import { fetchNeoWsData } from './neoClient.js';
-import { fetchNasaImages } from './nasaImageClient.js';
 
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 dakika
 const REQUEST_TIMEOUT_MS = 5000; // 5 saniye ağ zaman aşımı
@@ -143,7 +142,7 @@ async function getWithCache(cacheKey, fetcher) {
 
 /**
  * Sözleşme Fonksiyonu: getSpaceData
- * @param {string} queryType - "historical"|"neo"|"solar"|"spacecraft"|"apod"|"iss"|"eonet"|"mars_photos"|"mars_orbital_photos"|"nasa_images"|"comparison"|"light_delay"
+ * @param {string} queryType - "historical"|"neo"|"solar"|"spacecraft"|"apod"|"iss"|"eonet"|"mars_photos"|"mars_orbital_photos"|"comparison"|"light_delay"
  * @param {string} [identifier] - Görev kimliği veya alt belirteç
  * @returns {Promise<Array|Object>} Asla null veya undefined dönmez.
  */
@@ -198,10 +197,6 @@ export async function getSpaceData(queryType, identifier = '') {
   if (normalizedType === 'mars_orbital_photos' || normalizedType === 'hirise') {
     const key = normalizedId || 'jezero crater';
     return await getWithCache(`ag_cache_mars_orbital_${key}`, () => fetchMarsOrbitalPhotos(key, fetchWithTimeout));
-  }
-  if (normalizedType === 'nasa_images' || normalizedType === 'nasa_image_search') {
-    if (!normalizedId) return [];
-    return await getWithCache(`ag_cache_nasa_images_${normalizedId}`, () => fetchNasaImages(normalizedId, fetchWithTimeout));
   }
   if (normalizedType === 'mars_photos' || normalizedType === 'perseverance_photos') {
     if (normalizedId && normalizedId !== 'default' && normalizedId !== 'latest' && normalizedId !== 'all') return [];
