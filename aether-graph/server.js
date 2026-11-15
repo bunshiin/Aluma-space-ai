@@ -13,6 +13,7 @@ const HOST = '127.0.0.1';
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_TEXT_LENGTH = 500;
 const MAX_TTS_TEXT_LENGTH = 1200;
+const MAX_IMAGE_QUERY_LENGTH = 100;
 
 // Sadece uygulamanın ihtiyacı olan yerler sunulur; .env, geçmiş dosyası, testler ve araçlar dışarıda kalır
 const STATIC_ALLOWED = ['index.html', 'src', 'public'];
@@ -105,6 +106,19 @@ async function handleTtsRequest(req, res, getTtsAudio, getTtsFailure) {
   }
 }
 
+// Ödev sepeti fotoğrafı: arama sunucuda yapılır, tarayıcıya sadece görsel adresi ve kaynak bilgisi gider
+async function handleTopicImageRequest(req, res, getTopicImage) {
+  try {
+    const parsed = JSON.parse(await readBody(req));
+    const query = typeof parsed?.query === 'string' ? parsed.query.trim().slice(0, MAX_IMAGE_QUERY_LENGTH) : '';
+    const title = typeof parsed?.title === 'string' ? parsed.title.trim().slice(0, MAX_IMAGE_QUERY_LENGTH) : '';
+    const image = query ? await getTopicImage(query, title) : null;
+    sendJson(res, 200, image && typeof image.image_url === 'string' ? image : {});
+  } catch (err) {
+    handleBodyError(req, res, err);
+  }
+}
+
 async function handleRouteRequest(req, res, getRoute) {
   try {
     const parsed = JSON.parse(await readBody(req));
@@ -120,16 +134,17 @@ async function handleRouteRequest(req, res, getRoute) {
 /**
  * Sunucuyu kurar ama başlatmaz. getRoute testte sahte verilebilir; varsayılan gerçek yönlendiricidir.
  */
-export function createRouteServer({ getRoute, getTtsAudio = async () => null, getTtsFailure = null, rootDir = ROOT } = {}) {
+export function createRouteServer({ getRoute, getTtsAudio = async () => null, getTtsFailure = null, getTopicImage = async () => null, rootDir = ROOT } = {}) {
   return http.createServer(async (req, res) => {
     const pathname = String(req.url ?? '/').split('?')[0];
-    if (pathname === '/api/route' || pathname === '/api/tts') {
+    if (pathname === '/api/route' || pathname === '/api/tts' || pathname === '/api/topic-image') {
       if (req.method !== 'POST') {
         res.setHeader('Allow', 'POST');
         sendJson(res, 405, { error: 'Sadece POST' });
         return;
       }
       if (pathname === '/api/tts') await handleTtsRequest(req, res, getTtsAudio, getTtsFailure);
+      else if (pathname === '/api/topic-image') await handleTopicImageRequest(req, res, getTopicImage);
       else await handleRouteRequest(req, res, getRoute);
       return;
     }
@@ -159,7 +174,13 @@ export async function startServer(port = Number(process.env.PORT) || DEFAULT_POR
   const { getRouteFromGemini } = await import('./src/services/geminiRouter.js');
   const { createElevenLabsAudio, getElevenLabsFailure, isElevenLabsConfigured } = await import('./src/services/elevenLabsTts.js');
   if (!isElevenLabsConfigured()) console.warn('ELEVENLABS_API_KEY yok: seslendirme kapalı, uygulama sessiz çalışır.');
-  const server = createRouteServer({ getRoute: getRouteFromGemini, getTtsAudio: (text) => createElevenLabsAudio(text), getTtsFailure: getElevenLabsFailure });
+  const { fetchGeneralTopicImage } = await import('./src/services/generalImageFetcher.js');
+  const server = createRouteServer({
+    getRoute: getRouteFromGemini,
+    getTtsAudio: (text) => createElevenLabsAudio(text),
+    getTtsFailure: getElevenLabsFailure,
+    getTopicImage: (query, title) => fetchGeneralTopicImage(query, title)
+  });
   await new Promise((resolve) => server.listen(port, HOST, resolve));
   console.log(`AETHER-GRAPH sunucusu: http://${HOST}:${server.address().port}`);
   return server;
@@ -167,5 +188,11 @@ export async function startServer(port = Number(process.env.PORT) || DEFAULT_POR
 
 // Import anında çalışmaz; sadece `node server.js` ile başlatılınca
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  process.on('uncaughtException', (err) => {
+    console.error('Yakalanmayan sunucu hatası (uncaughtException):', err);
+  });
+  process.on('unhandledRejection', (reason) => {
+    console.error('Yakalanmayan reddedilme (unhandledRejection):', reason);
+  });
   startServer();
 }

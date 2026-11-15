@@ -16,15 +16,38 @@ export function createVoicePlayer(options = {}) {
   let activeAudio = null;
   let activeUrl = null;
 
+  function emitAiVoiceEvent(type) {
+    const CustomEventCtor = env?.CustomEvent || globalThis?.CustomEvent;
+    if (typeof CustomEventCtor !== "function") return;
+    const evt = new CustomEventCtor(type);
+    const targets = [options.doc, options.eventTarget, env, globalThis];
+    const visited = new Set();
+    for (const t of targets) {
+      if (!t || visited.has(t)) continue;
+      visited.add(t);
+      if (typeof t?.dispatchEvent === "function") {
+        try { t.dispatchEvent(evt); } catch (_) {}
+      }
+    }
+  }
+
   function stop() {
+    const wasPlaying = Boolean(activeAudio);
     requestId += 1;
     if (activeAudio) {
+      activeAudio.onended = null;
+      activeAudio.onerror = null;
       activeAudio.pause?.();
       activeAudio.src = "";
     }
     if (activeUrl) env.URL?.revokeObjectURL?.(activeUrl);
     activeAudio = null;
     activeUrl = null;
+    if (wasPlaying) {
+      options.onStop?.();
+      options.onEnd?.();
+      emitAiVoiceEvent("ag:ai-voice-stop");
+    }
   }
 
   /**
@@ -52,7 +75,15 @@ export function createVoicePlayer(options = {}) {
       if (myRequest !== requestId || !isEnabled) return false;
       activeUrl = env.URL.createObjectURL(blob);
       activeAudio = new env.Audio(activeUrl);
+      activeAudio.onended = () => {
+        stop();
+      };
+      activeAudio.onerror = () => {
+        stop();
+      };
       await activeAudio.play();
+      options.onStart?.();
+      emitAiVoiceEvent("ag:ai-voice-start");
       return true;
     } catch (err) {
       console.warn("Seslendirme çalınamadı:", err?.message);
@@ -68,6 +99,7 @@ export function createVoicePlayer(options = {}) {
       if (!isEnabled) stop();
     },
     isEnabled: () => isEnabled,
+    isPlaying: () => Boolean(activeAudio),
     destroy: stop,
   };
 }

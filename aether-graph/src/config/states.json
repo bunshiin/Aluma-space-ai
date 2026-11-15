@@ -1,0 +1,217 @@
+{
+  "valid_template_ids": ["LIGHT_DELAY", "GRAVITY_SIM", "NEO_SWARM", "SOLAR_FLARE", "APOLLO_11", "NONE"],
+  "initial_state": "SOLAR_SYSTEM",
+  "scenes": {
+    "SOLAR_SYSTEM": {
+      "template_id": "NONE",
+      "title": "Güneş Sistemi",
+      "description": "Güneş ve çevresindeki sekiz gezegen, cüce gezegenler, uydular ve asteroitlerden oluşan kütleçekimsel sistem.",
+      "student_description": "Güneş'in etrafında dönen gezegenlerin hepsi birlikte Güneş Sistemi'ni oluşturur. Dünya da bunlardan biri!",
+      "camera_target": "SOLAR_SYSTEM_OVERVIEW",
+      "status_event": null,
+      "data_fields": {},
+      "next_actions": [
+        { "target_state": "LIGHT_DELAY", "label": "Işık Gecikmesi" },
+        { "target_state": "MARS_EXPLORATION", "label": "Mars Keşfi" },
+        { "target_state": "PLANET_COMPARISON", "label": "Gezegen Karşılaştırması" },
+        { "target_state": "EARTH_EVENTS", "label": "Dünya'daki Doğa Olayları" },
+        { "target_state": "APOLLO_11", "label": "Apollo 11" },
+        { "action": "ADD_TO_HOMEWORK", "label": "Ödeve ekle" }
+      ]
+    },
+    "LIGHT_DELAY": {
+      "template_id": "LIGHT_DELAY",
+      "title": "Işık Gecikmesi",
+      "description": "Elektromanyetik sinyaller ışık hızıyla yayılır; gecikme süresi mesafenin ışık hızına bölünmesiyle bulunur (t = d / c).",
+      "student_description": "Işık çok hızlıdır ama uzay çok büyüktür! Dünya'dan gönderilen bir mesaj Mars'a birkaç dakikada ulaşır.",
+      "camera_target": "MARS",
+      "status_event": "ag:light-delay-status",
+      "data_fields": {
+        "source": "Kaynak",
+        "target": "Hedef",
+        "mode": "Mod",
+        "delay_s": "Tek yön gecikme (sn)",
+        "round_trip_s": "Gidiş-dönüş (sn)",
+        "speed_kms": "Hız (km/sn)",
+        "cme_arrival_h": "Varış süresi (saat)"
+      },
+      "id_fields": ["source", "target", "mode"],
+      "prompt_phases": ["ARRIVED", "COMPLETE"],
+      "next_actions": [
+        { "action": "ADD_TO_HOMEWORK", "label": "Ödeve ekle" },
+        { "target_state": "SOLAR_SYSTEM", "label": "Güneş Sistemi" }
+      ]
+    },
+    "PLANET_COMPARISON": {
+      "template_id": "GRAVITY_SIM",
+      "title": "Gezegen Karşılaştırması",
+      "description": "İki gök cisminin yarıçap ve yüzey çekim ivmesi oranları karşılaştırılır.",
+      "student_description": "İki gezegeni yan yana koyup hangisinin daha büyük olduğunu ve hangisinde daha hafif olacağını görürüz.",
+      "camera_target": "SOLAR_SYSTEM_OVERVIEW",
+      "status_event": "ag:planet-comparison-status",
+      "data_fields": {
+        "primary_object": "Birinci cisim",
+        "secondary_object": "İkinci cisim",
+        "primary_radius_km": "Birinci yarıçap (km)",
+        "secondary_radius_km": "İkinci yarıçap (km)",
+        "radius_ratio": "Yarıçap oranı",
+        "primary_gravity_ms2": "Birinci çekim (m/s²)",
+        "secondary_gravity_ms2": "İkinci çekim (m/s²)",
+        "gravity_ratio": "Çekim oranı"
+      },
+      "id_fields": ["primary_object", "secondary_object"],
+      "next_actions": [
+        { "action": "ADD_TO_HOMEWORK", "label": "Ödeve ekle" },
+        { "target_state": "SOLAR_SYSTEM", "label": "Güneş Sistemi" }
+      ]
+    },
+    "EARTH_EVENTS": {
+      "template_id": "NONE",
+      "title": "Dünya'daki Doğa Olayları",
+      "description": "NASA EONET verisiyle Dünya üzerindeki güncel doğal olaylar (yangın, fırtına, volkan) küre üzerinde işaretlenir.",
+      "student_description": "Uydular Dünya'yı uzaydan izler. Böylece orman yangınlarını ve fırtınaları haritada görebiliriz.",
+      "camera_target": "EARTH",
+      "status_event": "ag:eonet-status",
+      "data_fields": {
+        "title": "Olay",
+        "category_title": "Tür",
+        "timestamp_utc": "Tarih (UTC)",
+        "status": "Durum"
+      },
+      "id_fields": ["id", "title"],
+      "next_actions": [
+        { "action": "ADD_TO_HOMEWORK", "label": "Ödeve ekle" },
+        { "target_state": "SOLAR_SYSTEM", "label": "Güneş Sistemi" }
+      ]
+    },
+    "APOLLO_11": {
+      "template_id": "APOLLO_11",
+      "title": "Apollo 11",
+      "description": "1969'da Apollo 11 görevi ile insanlık ilk kez Ay yüzeyine iniş yaptı.",
+      "student_description": "1969'da astronotlar roketle Ay'a gitti ve Ay'da yürüyen ilk insanlar oldu!",
+      "camera_target": "MOON",
+      "status_event": "ag:apollo-status",
+      "data_fields": {
+        "phase": "Görev aşaması",
+        "title": "Adım",
+        "date_utc": "Tarih (UTC)"
+      },
+      "id_fields": ["phase", "title"],
+      "next_actions": [
+        { "action": "ADD_TO_HOMEWORK", "label": "Ödeve ekle" },
+        { "target_state": "SOLAR_SYSTEM", "label": "Güneş Sistemi" }
+      ]
+    },
+    "MARS_EXPLORATION": {
+      "template_id": "NONE",
+      "title": "Mars Keşfi",
+      "description": "Yörüngedeki uydular ve yüzeydeki keşif araçları Mars'ın jeolojisini ve iklimini inceler.",
+      "student_description": "Mars'a robotlar ve uydular gönderdik. Kırmızı gezegenin fotoğraflarını çekip kayaları inceliyorlar.",
+      "camera_target": "MARS",
+      "status_event": "ag:spacecraft-ready",
+      "data_fields": {
+        "id": "Araç",
+        "action_type": "İşlem"
+      },
+      "id_fields": ["id"],
+      "next_actions": [
+        { "action": "ADD_TO_HOMEWORK", "label": "Ödeve ekle" },
+        { "target_state": "SOLAR_SYSTEM", "label": "Güneş Sistemi" }
+      ]
+    }
+  },
+  "ui_texts": {
+    "panel_title": "Küçük Kaşif",
+    "close_button": "Kapat",
+    "student_mode_question": "Öğrenci Modu açılsın mı? Açıklamalar sadeleştirilsin mi?",
+    "student_mode_on": "Evet, Aç",
+    "student_mode_off": "Hayır, Normal Kalsın",
+    "student_mode_active": "Öğrenci Modu açık: açıklamalar sadeleştirildi.",
+    "student_mode_inactive": "Öğrenci Modu kapalı.",
+    "student_name_label": "Öğrenci adı",
+    "student_name_placeholder": "Adını yaz",
+    "homework_title_label": "Ödev başlığı",
+    "homework_title_placeholder": "Örn. Gezegenler Ödevi",
+    "default_homework_title": "Küçük Kaşif Ödev Raporu",
+    "add_question": "Bu konuyu ({topic}) Ödev Sepetine eklemek ister misin?",
+    "add_confirm": "Evet, Ekle",
+    "add_skip": "Geç",
+    "added_message": "Ödev Sepetine eklendi: {topic}",
+    "duplicate_message": "Bu konu zaten Ödev Sepetinde.",
+    "basket_title": "Ödev Sepeti",
+    "basket_empty": "Ödev Sepetin şimdilik boş. Bir sahneyi inceleyip \"Evet, Ekle\" diyerek başlayabilirsin.",
+    "remove_button": "Sil",
+    "open_basket_button": "Ödev Sepetini Aç",
+    "export_button": "PDF İndir",
+    "export_empty_warning": "PDF oluşturmak için önce Ödev Sepetine en az bir konu ekle.",
+    "export_missing_library": "PDF aracı yüklenemedi. İnternet bağlantını kontrol edip tekrar dene.",
+    "export_failed": "PDF oluşturulamadı. Lütfen tekrar dene.",
+    "export_success": "PDF indirildi.",
+    "report_title": "Küçük Kaşif Ödev Raporu",
+    "report_student_label": "Öğrenci",
+    "report_date_label": "Tarih",
+    "report_unknown_student": "İsimsiz Kaşif",
+    "photo_alt": "{topic} ile ilgili fotoğraf",
+    "photo_loading": "NASA arşivinden fotoğraf aranıyor…",
+    "photo_fallback_source": "Çevrimdışı görsel (NASA fotoğrafı bulunamadı)",
+    "photo_user_source": "Öğrencinin eklediği görsel",
+    "photo_next_button": "Başka NASA Fotoğrafı",
+    "photo_upload_button": "Görsel Ekle",
+    "photo_upload_invalid": "Sadece 5 MB'tan küçük bir resim dosyası ekleyebilirsin.",
+    "text_placeholder": "Bu konu hakkında öğrendiklerini kendi cümlelerinle yaz",
+    "homework_need_topic": "Hangi konuyu ekleyeceğimi anlayamadım. Önce bir sahneye bak ya da konuyu yaz (ör. \"Ay yerçekimini ödevime ekle\").",
+    "questions_title": "Şu an baktığın yer hakkında sorabileceğin örnek sorular",
+    "topic_gravity_title": "{body} Yüzey Yerçekimi",
+    "topic_gravity_description": "{body} yüzeyinde serbest düşme ivmesi {gravity} m/s²'dir. 10 metre yükseklikten bırakılan bir cisim yaklaşık {fall_s} saniyede yere ulaşır.",
+    "topic_gravity_student_description": "{body} yüzeyinde 10 metreden bir taş bıraksan yaklaşık {fall_s} saniyede yere düşer. Buradaki çekim {gravity} m/s².",
+    "topic_light_delay_title": "{source} → {target} Işık Gecikmesi",
+    "topic_light_delay_description": "Işık {source} ile {target} arasındaki yolu tek yönde {delay_s} saniyede, gidiş-dönüş {round_trip_s} saniyede alır (t = d / c).",
+    "topic_light_delay_student_description": "{source} ile {target} arasında gönderilen bir mesaj {delay_s} saniyede ulaşır. Cevabın gelmesi {round_trip_s} saniye sürer!",
+    "topic_body_description": "{body}: ortalama yarıçapı {radius_km} km, yüzey yerçekimi {gravity} m/s².",
+    "topic_body_student_description": "{body} yaklaşık {radius_km} km yarıçapında bir gök cismi. Yüzeyindeki çekim {gravity} m/s².",
+    "fact_gravity": "Yüzey yerçekimi (m/s²)",
+    "fact_radius": "Ortalama yarıçap (km)",
+    "fact_fall_10m": "10 m'den düşme süresi (sn)",
+    "fact_delay_one_way": "Tek yön gecikme (sn)",
+    "fact_delay_round_trip": "Gidiş-dönüş (sn)"
+  },
+  "body_names": {
+    "SUN": "Güneş", "MERCURY": "Merkür", "VENUS": "Venüs", "EARTH": "Dünya", "MOON": "Ay", "MARS": "Mars",
+    "JUPITER": "Jüpiter", "SATURN": "Satürn", "URANUS": "Uranüs", "NEPTUNE": "Neptün", "PLUTO": "Plüton",
+    "CERES": "Ceres", "IO": "Io", "EUROPA": "Europa", "GANYMEDE": "Ganymede", "CALLISTO": "Callisto",
+    "TITAN": "Titan", "TRITON": "Triton", "HAUMEA": "Haumea", "MAKEMAKE": "Makemake", "ERIS": "Eris",
+    "PERSEVERANCE": "Perseverance", "CURIOSITY": "Curiosity", "PATHFINDER": "Pathfinder", "INGENUITY": "Ingenuity",
+    "MARS_PHOTO_SAT": "Mars Keşif Uydusu (MRO)", "ISS": "Uluslararası Uzay İstasyonu", "HUBBLE": "Hubble Uzay Teleskobu",
+    "JWST": "James Webb Uzay Teleskobu", "PARKER": "Parker Güneş Sondası", "NEW_HORIZONS": "New Horizons",
+    "VOYAGER_1": "Voyager 1", "VOYAGER_2": "Voyager 2", "APOLLO_LUNAR_MODULE": "Apollo Ay Modülü"
+  },
+  "image_queries": {
+    "SUN": "Sun solar dynamics observatory", "MERCURY": "Mercury MESSENGER", "VENUS": "Venus", "EARTH": "Earth from space",
+    "MOON": "Moon surface", "MARS": "Mars surface", "JUPITER": "Jupiter Juno", "SATURN": "Saturn Cassini",
+    "URANUS": "Uranus", "NEPTUNE": "Neptune Voyager", "PLUTO": "Pluto New Horizons",
+    "PERSEVERANCE": "Perseverance rover", "CURIOSITY": "Curiosity rover", "INGENUITY": "Ingenuity helicopter",
+    "ISS": "International Space Station", "HUBBLE": "Hubble Space Telescope", "JWST": "James Webb Space Telescope",
+    "VOYAGER_1": "Voyager spacecraft", "VOYAGER_2": "Voyager spacecraft", "APOLLO_LUNAR_MODULE": "Apollo 11 lunar module"
+  },
+  "example_questions": {
+    "DEFAULT": ["Güneş Sistemi'nde kaç gezegen var?", "Dünya'dan Mars'a ışık kaç dakikada gider?", "En büyük gezegen hangisi?"],
+    "SUN": ["Güneş patlamasını göster", "Güneş'in yüzeyi kaç derece?", "Güneş'ten Dünya'ya ışık kaç saniyede gelir?"],
+    "EARTH": ["Şu an aktif orman yangınları nerede?", "Dünya'dan Ay'a ışık kaç saniyede gider?", "Dünya ile Mars'ı karşılaştır"],
+    "MOON": ["Dünya'dan Ay'a ışık kaç saniyede gider?", "Apollo 11 nereye indi?", "Ay'da yerçekimi ne kadar?", "Ay'ın yerçekimini ödevime ekle"],
+    "MARS": ["Mars'ta yerçekimi ne kadar?", "Perseverance şu an nerede?", "Dünya'dan Mars'a ışık kaç dakikada gider?", "Mars yerçekimini ödevime ekle"],
+    "JUPITER": ["Jüpiter'de yerçekimi ne kadar?", "Jüpiter ile Dünya'yı karşılaştır", "Europa'da su var mı?"],
+    "SATURN": ["Satürn'ün halkaları neden yapılmış?", "Titan'da yerçekimi ne kadar?", "Satürn ile Jüpiter'i karşılaştır"],
+    "PERSEVERANCE": ["Perseverance Mars'ta ne arıyor?", "Jezero kraterinin uydu fotoğrafını göster", "Ingenuity helikopteri kaç kez uçtu?"],
+    "CURIOSITY": ["Curiosity hangi kraterde?", "Mars'ta yerçekimi ne kadar?", "Perseverance şu an nerede?"],
+    "ISS": ["ISS Dünya'nın etrafını kaç dakikada döner?", "Uzay istasyonu şu an nerede?", "Astronot kıyafetini göster"],
+    "HUBBLE": ["Hubble hangi yörüngede?", "Hubble ile James Webb arasındaki fark ne?", "Günün uzay fotoğrafını göster"],
+    "JWST": ["James Webb neden bu kadar uzakta?", "James Webb'in çektiği bir fotoğraf göster", "Hubble nerede?"],
+    "VOYAGER_1": ["Voyager 1 Dünya'dan ne kadar uzakta?", "Voyager'dan sinyal kaç saatte gelir?", "Altın plakta ne var?"],
+    "APOLLO_LUNAR_MODULE": ["Apollo 11 nereye indi?", "Ay'a ilk ayak basan kim?", "Ay'da yerçekimi ne kadar?"],
+    "LIGHT_DELAY": ["Işık Güneş'ten Dünya'ya kaç saniyede gelir?", "Dünya'dan Jüpiter'e ışık kaç dakikada gider?", "Bu ışık gecikmesini ödevime ekle"],
+    "PLANET_COMPARISON": ["Ay'da 40 kilo kaç gelir?", "Jüpiter ile Dünya'yı karşılaştır", "Bu karşılaştırmayı ödevime ekle"],
+    "EARTH_EVENTS": ["Şu an aktif volkanlar hangileri?", "En yakın fırtına nerede?", "Uydular yangını nasıl görür?"],
+    "APOLLO_11": ["Apollo 11 nereye indi?", "Ay'a gidiş kaç gün sürdü?", "Satürn V roketini göster"],
+    "MARS_EXPLORATION": ["Perseverance şu an nerede?", "Mars'ta yerçekimi ne kadar?", "Jezero kraterinin uydu fotoğrafını göster"]
+  }
+}

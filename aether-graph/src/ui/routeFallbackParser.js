@@ -1,11 +1,36 @@
 // Komut metinlerinden 3D model, gezegen karşılaştırması, yerçekimi testi ve aksiyon yedeklerini çözer.
 
+import { MissionStateMachine } from "../logic/stateMachine.js";
+import { calculateSingleBodyGravity, createSingleBodyFacts } from "./bodyFacts.js";
+
 export const SOLAR_BODY_NAME_REGEX = /^(sun|mercury|venus|earth|moon|mars|ceres|jupiter|io|europa|ganymede|callisto|saturn|titan|uranus|neptune|triton|pluto|haumea|makemake|eris)$/i;
 
 const COMPARE_HINT_RE = /kar[şs][ıi]la[şs]t[ıi]r|k[ıi]yasla|\bvs\b|b[üu]y[üu]kl[üu]k\s*fark|boyut\s*fark/i;
-const GRAVITY_WORD_RE = /yer[çc]ekimi|gravity|a[ğg][ıi]rl[ıi][ğg]?[ıi]?/i;
+export const GRAVITY_WORD_RE = /yer[çc]ekimi|gravity|a[ğg][ıi]rl[ıi][ğg]?[ıi]?/i;
 const GRAVITY_ACTION_RE = /serbest\s*d[üu][şs]|d[üu][şs]me|astronot.*test|yer[çc]ekimi\s*test|gravity\s*(?:sim|test)|ka[çc]\s*(?:kg|kilo)/i;
-const LIGHT_DELAY_HINT_RE = /[ıi][şs][ıi]k\s*gecik|light\s*delay|sinyal\w*\s.*(s[üu]r|gid|ula[şs]|gecik)|haberle[şs]me\s*gecik/i;
+export const LIGHT_DELAY_HINT_RE = /[ıi][şs][ıi]k\s*gecik|light\s*delay|sinyal\w*\s.*(s[üu]r|gid|ula[şs]|gecik)|haberle[şs]me\s*gecik/i;
+
+// "ödevime ekle", "ödeve ekle", "ödev sepetine ekle", "ödevlerime kaydet", "add to homework"
+const HOMEWORK_ADD_INTENT_RE = /[öo]dev\p{L}*\s+(?:sepet\p{L}*\s+)?(?:olarak\s+)?(?:ekle|kaydet|koy|at)\p{L}*|add\s+(?:this\s+)?to\s+(?:my\s+)?homework/iu;
+
+/**
+ * Komutta "ödeve ekle" niyeti varsa true döner; bu niyette sahne değişmez, sadece ödev kartı hazırlanır.
+ */
+export function isHomeworkIntent(text) {
+  return HOMEWORK_ADD_INTENT_RE.test(String(text || ""));
+}
+
+/**
+ * Komuttan "ödevime ekle" ifadesini ve dolgu kelimeleri atıp kalan konu metnini döner.
+ */
+export function stripHomeworkIntent(text) {
+  return String(text || "")
+    .replace(HOMEWORK_ADD_INTENT_RE, " ")
+    .replace(/[.,!?;:]+/g, " ")
+    .replace(/(^|\s)(bunu|şunu|sunu|bu|şu|su|konuyu|lütfen|lutfen|da|de)(?=\s|$)/giu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export const FALLBACK_ASTEROIDS = Object.freeze([
   { name: "99942 Apophis", close_approach_utc: "2029-04-13T21:46:00Z", distance_km: 31600, velocity_kmh: 107000, is_hazardous: true },
@@ -94,6 +119,23 @@ export function extractComparisonParams(text) {
 /**
  * Gemini veya yerel rotadaki karşılaştırma parametrelerini 3D PLANET_COMPARISON sözleşmesine tamamlar.
  */
+// Cisim kendisiyle kıyaslanmaz (MOON vs MOON): karşılaştırma yerine o cismin tek başına yerçekimi kartı açılır
+function applySingleBodyCard(mergedParams, body) {
+  const stats = calculateSingleBodyGravity(body);
+  for (const key of ["primary_object", "secondary_object", "target_1", "target_2", "is_gravity_test"]) delete mergedParams[key];
+  mergedParams.model_url = "SOLAR_SYSTEM";
+  mergedParams.camera_target = body;
+  if (!stats) return "FOCUS_OBJECT";
+  const machine = new MissionStateMachine();
+  const name = machine.getBodyName(body);
+  const vars = { body: name, gravity: stats.gravity_ms2, fall_s: stats.fall_10m_s };
+  mergedParams.title = machine.getUiText("topic_gravity_title", vars);
+  mergedParams.description = machine.getUiText("topic_gravity_description", vars);
+  mergedParams.student_description = machine.getUiText("topic_gravity_student_description", vars);
+  mergedParams.facts = createSingleBodyFacts(stats, (key) => machine.getUiText(key));
+  return "SHOW_FACT_CARD";
+}
+
 export function applyComparisonEnrichment(normalized, mergedParams, sceneHint, templateId) {
   const rawPrimary = mergedParams.primary_object || mergedParams.target_1 || mergedParams.source;
   const rawSecondary = mergedParams.secondary_object || mergedParams.target_2 || mergedParams.target;
@@ -105,6 +147,9 @@ export function applyComparisonEnrichment(normalized, mergedParams, sceneHint, t
     templateId === "GRAVITY_SIM" ||
     (Boolean(fallbackComp) && normalized.action_type !== "OPEN_POPUP" && normalized.action_type !== "RESET_VIEW");
   if (!isCompare) return normalized.action_type;
+  if (mergedParams.primary_object && mergedParams.primary_object === mergedParams.secondary_object) {
+    return applySingleBodyCard(mergedParams, mergedParams.primary_object);
+  }
 
   const hasExplicitModel = Boolean(mergedParams.model_url || mergedParams.modelUrl);
   const hasRowsTable = Array.isArray(mergedParams.rows) && !mergedParams.primary_object && !mergedParams.secondary_object;
@@ -114,6 +159,7 @@ export function applyComparisonEnrichment(normalized, mergedParams, sceneHint, t
   mergedParams.primary_object = mergedParams.primary_object || fallbackComp?.primary_object || bodies[0] || "EARTH";
   mergedParams.secondary_object =
     mergedParams.secondary_object || fallbackComp?.secondary_object || bodies[1] || (bodies[0] && bodies[0] !== "EARTH" ? bodies[0] : "MARS");
+  if (mergedParams.primary_object === mergedParams.secondary_object) return applySingleBodyCard(mergedParams, mergedParams.primary_object);
   if (typeof mergedParams.is_gravity_test !== "boolean") {
     mergedParams.is_gravity_test = templateId === "GRAVITY_SIM" || Boolean(fallbackComp?.is_gravity_test);
   }
@@ -155,12 +201,14 @@ export function resolveFallbackSceneParams(text) {
  */
 export function resolveFallbackActionType(text) {
   const value = String(text || "");
+  if (isHomeworkIntent(value)) return "ADD_TO_HOMEWORK";
   if (/sıfırla|sifirla|reset/i.test(value)) return "RESET_VIEW";
   if (/split|ikiye/i.test(value)) return "SPLIT_SCREEN";
   if (/popup|pencere|görsel|gorsel|resim|foto|görüntü|goruntu|ne çekti|çektiği|cektigi|apod/i.test(value)) return "OPEN_POPUP";
   if (/pdf|indir/i.test(value)) return "EXPORT_PDF";
   if (/sepet/i.test(value)) return "SHOW_HOMEWORK_BASKET";
-  if (/ödev|odev/i.test(value)) return "ADD_TO_HOMEWORK";
+  // Ekleme fiili olmadan geçen "ödev" sepeti açar; ekleme niyeti yukarıda isHomeworkIntent ile yakalanır
+  if (/ödev|odev/i.test(value)) return "SHOW_HOMEWORK_BASKET";
   if (/kapat|close/i.test(value)) return "CLOSE_PANEL";
   if (extractComparisonParams(value) || /karşılaştır|karsilastir|kıyasla|kiyasla/i.test(value)) return "SHOW_COMPARISON";
   if (/zaman|timeline/i.test(value)) return "SHOW_TIMELINE";
