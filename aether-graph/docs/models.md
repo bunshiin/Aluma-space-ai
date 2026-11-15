@@ -54,6 +54,7 @@ Bu doküman `public/models/` altındaki `.glb` modellerinin node ağacını, `TH
 | `curiosity.glb` | 11.31 | RAW | 1 | 2.78 × 2.22 × 3.94 | `MSL` (Gale Crater: `-4.5895°, 137.4417°`) |
 | `pathfinder.glb` | 11.36 | RAW | 1 | 2.28 × 1.59 × 1.65 | `panels_right_front` (Ares Vallis: `19.13°, -33.22°`) |
 | `ingenuity.glb` | 1.93 | DRACO | 11 | 1.01 × 0.58 × 1.18 | `bus` → `rotors_01` (üst rotor, y≈0.45 m), `rotors_02` (alt rotor, y≈0.35 m), `solar_panel`, `leg_01..04`, `cams` (yalnızca `INGENUITY` çağrıldığında Jezero'da yüklenir) |
+| `moonAstrounot.glb` | 16.93 | DRACO + WebP doku | 1 | 0.79 × 1.04 × 1.93 (yerel X × Y × Z) | `Z2` (tek mesh, iskelet/animasyon yok). Kök dönüşü +90° X: ayak y≈0, baş y≈1.93 m. Yüz −Z, sırt çantası +Z (yerel Y −0.42…+0.63; çanta tarafı daha uzun). Ay yüzeyinde iki kopya: `NEIL_ARMSTRONG` (6.2, 0, 2.6) ve `BUZZ_ALDRIN` (3.0, 0, 6.4) m, boy 1.9 m (`lunarAstronauts.js`) |
 | `marsphotosat.glb` | 1.83 | RAW | 8 | 10.52 × 4.62 × 5.34 | `shiny_panel`, `black`, `krinkle`, `foil_silver`, `AO`, `dark grey`, `foil_gold`, `tex` (Mars yörüngesi) |
 | `hubble_space_telescope.glb` | 1.62 | DRACO | 2 | 458.25 × 501.31 × 525.49 | `<3DSRoot>` → `hst` |
 | `iss.glb` | 42.43 | RAW | 132 | 31.07 × 24.20 × 75.11 | `ISS`, `11 Canadarm2`, `29 DEXTRE`, güneş panelleri (`panel_01_p.001` vb.) |

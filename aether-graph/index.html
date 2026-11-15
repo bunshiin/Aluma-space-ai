@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="./src/ui/styles-components.css">
   <link rel="stylesheet" href="./src/ui/eonetStyles.css">
   <link rel="stylesheet" href="./src/ui/styles-window.css">
+  <link rel="stylesheet" href="./src/ui/studentModeStyles.css">
 
   <script type="importmap">
     {
@@ -155,7 +156,7 @@
             <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm-9 9h18M12 3c2.6 2.5 3.8 5.5 3.8 9s-1.2 6.5-3.8 9c-2.6-2.5-3.8-5.5-3.8-9S9.4 5.5 12 3Z"/></svg>
           </span>
           <input id="command-input" class="eonet-query-input" type="text" autocomplete="off" spellcheck="false" maxlength="300">
-          <button id="mic-button" type="button" class="eonet-query-mic" aria-label="Sesli komut">
+          <button id="mic-button" type="button" class="eonet-query-mic is-idle" aria-label="Sesli komut" aria-pressed="false" data-state="IDLE">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="9" y="2" width="6" height="12" rx="3"></rect>
               <path d="M5 10a7 7 0 0 0 14 0"></path>
@@ -193,13 +194,38 @@
           Sesli Okuma
         </button>
 
-        <button id="demo-add-homework-button" type="button" class="ag-settings-btn">
+        <button id="hud-size-toggle" type="button" class="ag-settings-btn">
           <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
           </svg>
-          Örnek Ödev Ekle
+          HUD Görünümü
         </button>
+
+        <button id="simplify-text-button" type="button" class="ag-settings-btn">
+          <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"></path>
+          </svg>
+          Metni Sadeleştir
+        </button>
+
+        <div class="ag-settings-pair">
+          <button id="play-animation-button" type="button" class="ag-settings-btn">
+            <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="6 3 20 12 6 21 6 3"></polygon>
+            </svg>
+            Oynat
+          </button>
+          <button id="pause-animation-button" type="button" class="ag-settings-btn">
+            <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+            Duraklat
+          </button>
+        </div>
 
         <button id="reset-view-button" type="button" class="ag-settings-btn ag-reset-action">
           <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -233,20 +259,7 @@
       </div>
     </div>
 
-    <div id="homework-basket-container" class="ag-homework-basket-container is-hidden">
-      <div class="ag-homework-dialog ag-soft-panel" role="dialog" aria-modal="true" aria-labelledby="homework-basket-title">
-        <div class="ag-homework-header">
-          <h2 id="homework-basket-title" class="ag-homework-title">Küçük Kaşif Ödev Sepeti</h2>
-          <button id="close-basket-button" type="button" class="ag-btn ag-close-btn" aria-label="Ödev sepetini kapat">Kapat</button>
-        </div>
-        <div id="homework-printable-area" class="ag-homework-printable-area">
-          <ul id="homework-list" class="ag-homework-list"></ul>
-        </div>
-        <div class="ag-homework-footer">
-          <button id="export-pdf-button" type="button" class="ag-btn ag-export-btn">PDF İndir</button>
-        </div>
-      </div>
-    </div>
+    <div id="student-panel-root" class="student-mode-panel-root"></div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js" defer></script>

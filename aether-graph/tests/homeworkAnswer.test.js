@@ -48,6 +48,18 @@ test("yerel yedek, FALLBACK veya boş cevap karta yazılmaz; https olmayan görs
   assert.equal(insecure.photo, null, "uygulamanın yer tutucu görseli gerçek fotoğraf sayılmaz; kart kendi fotoğrafını arar");
 });
 
+test("sorudaki net niyet (Satürn V) Gemini'nin gezegen fotoğrafının önüne geçer", () => {
+  const route = {
+    action_type: "FOCUS_OBJECT", template_id: "NONE", speech_text: "Satürn V.",
+    parameters: { title: "Satürn", description: "Satürn halkalı bir gezegendir.", image_url: "https://upload.wikimedia.org/saturn-rings.jpg", image_query: "Saturn planet rings", data_source: "GEMINI" }
+  };
+  const item = createAnswerHomeworkItem("Satürn 5 nedir?", route, { getText, intentImageQuery: "Saturn V rocket" });
+  assert.equal(item.image_query, "Saturn V rocket");
+  assert.equal(item.photo, null, "gezegen fotoğrafı alınmaz; kart roket fotoğrafı arar");
+  const plain = createAnswerHomeworkItem("Satürn nedir?", route, { getText });
+  assert.equal(plain.photo.image_url, "https://upload.wikimedia.org/saturn-rings.jpg");
+});
+
 test("sadece sesli özet dönen Gemini cevabı da eklenir; fotoğraf araması hedef cisimden yapılır", () => {
   const route = {
     action_type: "FOCUS_OBJECT", template_id: "NONE",

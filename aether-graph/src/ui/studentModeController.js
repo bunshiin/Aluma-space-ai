@@ -8,7 +8,7 @@ import { createHomeworkEventCapture } from "./homeworkEventCapture.js";
 import { createHomeworkPhotoLoader } from "./homeworkPhotoLoader.js";
 import { createAnswerHomeworkItem, hasUsableAnswer } from "./homeworkAnswer.js";
 import { exportHomeworkReport, getPdfResultTextKey } from "./homeworkReport.js";
-import { createTopicHomeworkItem, resolveHomeworkTopic } from "./homeworkTopic.js";
+import { createTopicHomeworkItem, getVehicleKey, resolveHomeworkTopic } from "./homeworkTopic.js";
 import { removeHomeworkIntent, stripHomeworkIntent } from "./routeFallbackParser.js";
 import { createStudentPanel } from "./studentPanel.js";
 
@@ -202,7 +202,7 @@ export function createStudentModeController(options = {}) {
   async function exportPdf() {
     const result = await exportHomeworkReport({
       doc: options.container?.ownerDocument, items: machine.getHomeworkItems(), profile, getText,
-      date: options.now?.() ?? new Date(), html2pdf: options.html2pdf, pdfEnv: options.pdfEnv
+      date: options.now?.() ?? new Date(), html2pdf: options.html2pdf, pdfEnv: options.pdfEnv, loadImageDataUrl: options.loadReportImage
     });
     if (!panel.isOpen() || currentView?.name !== "HOMEWORK_BASKET") showBasket();
     panel.showMessage(getText(getPdfResultTextKey(result)), result.exported ? "success" : "warning");
@@ -223,7 +223,8 @@ export function createStudentModeController(options = {}) {
   // Soru + Gemini cevabını (cevapla gelen fotoğrafla birlikte) karta ekler; cevap yoksa null döner.
   function addAnswer(question, route) {
     const item = createAnswerHomeworkItem(question, route, {
-      isStudentMode: machine.isStudentMode(), getText, getImageQuery: (key) => machine.getImageQuery(key, "")
+      isStudentMode: machine.isStudentMode(), getText, getImageQuery: (key) => machine.getImageQuery(key, ""),
+      intentImageQuery: machine.getImageQuery(getVehicleKey(question), "")
     });
     if (!item) return null;
     recordAnswer(question, route);

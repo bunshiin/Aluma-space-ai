@@ -1,7 +1,9 @@
 // Gemini JSON çıktılarını doğrular; HUD, panel ve 3D/2D sahne kontrolcülerini koordine eder.
 
+import { cancelCameraArrival, scheduleOnCameraArrival } from "./cameraArrivalGate.js";
 import { createHudController } from "./hudController.js";
 import { closeAllPanels, renderOverlayCard, renderPopup, renderSidePanel } from "./panelController.js";
+import { getRouterElements } from "./routerElements.js";
 import { createViewportController } from "./viewportController.js";
 
 export const VALID_ACTION_TYPES = Object.freeze([
@@ -40,47 +42,8 @@ function resolveDoc() {
   return routerConfig.doc || (typeof document !== "undefined" ? document : null);
 }
 
-function getElements(doc) {
-  if (!doc || typeof doc.getElementById !== "function") {
-    return null;
-  }
-  const byId = (id) => doc.getElementById(id);
-  return {
-    appShell: byId("app-shell"),
-    sceneContainer: byId("scene-container"),
-    canvasContainer: byId("canvas-container"),
-    proceduralCanvas: byId("procedural-canvas"),
-    loadingOverlay: byId("loading-overlay"),
-    progressBar: byId("loading-progress-bar"),
-    progressText: byId("loading-progress-text"),
-    hudContainer: byId("hud-container"),
-    statusBadge: byId("status-badge"),
-    speechPanel: byId("speech-panel"),
-    speechText: byId("speech-text"),
-    hudSizeToggle: byId("hud-size-toggle"),
-    simplifyTextButton: byId("simplify-text-button"),
-    playAnimationButton: byId("play-animation-button"),
-    pauseAnimationButton: byId("pause-animation-button"),
-    overlayCard: byId("overlay-card-container"),
-    sidePanel: {
-      container: byId("side-panel-container"),
-      titleEl: byId("side-panel-title"),
-      bodyEl: byId("side-panel-body"),
-      actionsEl: byId("side-panel-actions"),
-      closeButton: byId("side-panel-close-button")
-    },
-    popup: {
-      container: byId("popup-container"),
-      dialog: byId("popup-dialog"),
-      titleEl: byId("popup-title"),
-      contentEl: byId("popup-content"),
-      closeButton: byId("popup-close-button")
-    }
-  };
-}
-
 function buildControllers() {
-  cachedElements = getElements(resolveDoc());
+  cachedElements = getRouterElements(resolveDoc());
   hudController = createHudController(cachedElements || {});
   viewportController = createViewportController({
     appShell: cachedElements?.appShell || null,
@@ -147,10 +110,21 @@ export function configureActionRouter(options = {}) {
  * Aktif 3D sahneyi temizler ve UI yönlendirici durumunu sıfırlar.
  */
 export function resetActionRouterState() {
+  cancelCameraArrival();
   viewportController?.destroy();
   viewportController?.applyAction("RESET_VIEW");
   hudController?.reset();
   closeOpenPanels();
+}
+
+// Kamera hedefe uçarken panel/pop-up açılmaz; kamera varınca çizilir (uçuş yoksa anında çizilir)
+function schedulePanelRender(viewportResult, renderFn) {
+  if (!viewportResult?.is_camera_transitioning) {
+    renderFn();
+    return;
+  }
+  closeOpenPanels();
+  scheduleOnCameraArrival(viewportResult.camera_target, renderFn);
 }
 
 /**
@@ -186,6 +160,9 @@ export function handleActionRouter(json) {
       scene_promise: null
     };
   }
+
+  // Ödev aksiyonları kamerayı değiştirmez; bekleyen bir varış çizimini iptal etmezler
+  if (!NON_NAVIGATING_ACTIONS.has(rawAction)) cancelCameraArrival();
 
   const baseParams = json.parameters && typeof json.parameters === "object" ? { ...json.parameters } : {};
   const parameters = enrichLightDelay(resolvedTemplateId, baseParams);
@@ -223,7 +200,7 @@ export function handleActionRouter(json) {
   switch (rawAction) {
     case "OPEN_POPUP":
       closeAllPanels([cachedElements?.sidePanel?.container, cachedElements?.overlayCard]);
-      renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc);
+      schedulePanelRender(viewportResult, () => renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc));
       break;
     case "SPLIT_SCREEN":
       closeOpenPanels();
@@ -253,14 +230,14 @@ export function handleActionRouter(json) {
         closeOpenPanels();
         break;
       }
-      renderOverlayCard(cachedElements?.overlayCard, rawAction, resolvedTemplateId, parameters, doc);
+      schedulePanelRender(viewportResult, () => renderOverlayCard(cachedElements?.overlayCard, rawAction, resolvedTemplateId, parameters, doc));
       break;
     case "SHOW_TIMELINE":
     case "SHOW_FACT_CARD":
       closeAllPanels([cachedElements?.sidePanel?.container, cachedElements?.popup?.container]);
       // Fotoğraflı pop-up aynı bilgiyi zaten gösterir; karttan tekrar çizilmez
       if (parameters.supporting_photo === true && parameters.image_url) break;
-      renderOverlayCard(cachedElements?.overlayCard, rawAction, resolvedTemplateId, parameters, doc);
+      schedulePanelRender(viewportResult, () => renderOverlayCard(cachedElements?.overlayCard, rawAction, resolvedTemplateId, parameters, doc));
       break;
     case "ADD_TO_HOMEWORK":
       routerConfig.onHomeworkAdded?.({ ...parameters, template_id: resolvedTemplateId });
@@ -288,7 +265,7 @@ export function handleActionRouter(json) {
   }
   // Odak/kart aksiyonlarında konunun fotoğrafı da gelir (sunucu supporting_photo ile işaretler); sahne odağı korunur
   if (isNavigating && rawAction !== "OPEN_POPUP" && parameters.supporting_photo === true && parameters.image_url) {
-    renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc);
+    schedulePanelRender(viewportResult, () => renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc));
   }
 
   return {

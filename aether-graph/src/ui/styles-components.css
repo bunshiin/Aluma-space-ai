@@ -103,7 +103,7 @@
 
 .ag-icon { width: 1rem; height: 1rem; flex-shrink: 0; }
 
-/* Yan görev paneli, overlay kartı, pop-up ve ödev sepeti */
+/* Yan görev paneli, overlay kartı ve pop-up */
 /* Sağ taraf AI yanıt paneline (eonet-panel) ait; görev paneli sola alınır */
 .ag-side-panel-container {
   position: fixed; top: 6rem; left: 1.75rem; max-height: calc(100vh - 11rem); z-index: 30;
@@ -111,18 +111,15 @@
 }
 
 .ag-side-panel-header,
-.ag-settings-header,
-.ag-homework-header {
+.ag-settings-header {
   display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
   padding: 0.85rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .ag-side-panel-title,
-.ag-settings-title,
-.ag-homework-title { margin: 0; font-size: 0.86rem; font-weight: 600; letter-spacing: 0.1em; color: #f8fafc; }
+.ag-settings-title { margin: 0; font-size: 0.86rem; font-weight: 600; letter-spacing: 0.1em; color: #f8fafc; }
 
-.ag-side-panel-body,
-.ag-homework-printable-area {
+.ag-side-panel-body {
   flex: 1; overflow-y: auto; padding: 1rem; font-size: 0.9rem; line-height: 1.55; color: #cbd5e1;
 }
 
@@ -137,27 +134,7 @@
   overflow-y: auto; padding: 1rem; box-sizing: border-box;
 }
 
-.ag-homework-basket-container {
-  position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
-  padding: 1rem; box-sizing: border-box; background-color: rgba(3, 5, 8, 0.84); backdrop-filter: blur(10px);
-}
-
-
-.ag-homework-dialog { width: min(32rem, 100%); max-height: min(82vh, 42rem); display: flex; flex-direction: column; overflow: hidden; }
-.ag-homework-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.55rem; }
-
-.ag-homework-item {
-  padding: 0.65rem 0.9rem; border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1);
-  background-color: #0f172a; color: #e2e8f0; font-size: 0.88rem;
-}
-
-.ag-homework-footer {
-  display: flex; align-items: center; justify-content: flex-end; gap: 0.625rem;
-  padding: 0.85rem 1rem; border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
 .ag-close-btn { padding: 0.32rem 0.75rem; }
-.ag-export-btn { background-color: #0ea5e9; border-color: #38bdf8; color: #f8fafc; }
 
 .ag-panel-action-btn { width: 100%; justify-content: flex-start; text-align: left; margin-top: 0.45rem; }
 .ag-panel-description { margin: 0 0 0.75rem 0; font-size: 0.9rem; line-height: 1.5; color: #cbd5e1; }

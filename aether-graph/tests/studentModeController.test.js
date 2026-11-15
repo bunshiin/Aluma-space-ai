@@ -23,7 +23,10 @@ function setup(extra = {}) {
     photoQueries.push([queryType, identifier]);
     return NASA_PHOTOS;
   });
-  const controller = createStudentModeController({ container, eventTarget, now: () => new Date(2026, 10, 15), ...extra, getSpaceData });
+  // PDF fotoğrafları gerçek ağdan indirilmez: sahte yükleyici adresi işaretli bir veri adresine çevirir
+  const reportImageRequests = [];
+  const loadReportImage = extra.loadReportImage ?? (async (src) => { reportImageRequests.push(src); return "data:image/jpeg;base64,UkVQT1JU"; });
+  const controller = createStudentModeController({ container, eventTarget, now: () => new Date(2026, 10, 15), ...extra, getSpaceData, loadReportImage });
   const panel = () => findByClass(container, "student-mode-panel");
   const isOpen = () => panel()?.classList.contains("student-mode-panel-open") ?? false;
   const clickButton = (text) => {
@@ -34,7 +37,7 @@ function setup(extra = {}) {
   const message = () => findByClass(container, "student-mode-panel-message").textContent;
   const emit = (name, detail) => eventTarget.dispatchEvent(new CustomEvent(name, { detail }));
   const questionTexts = () => findAllByClass(container, "homework-questions-btn").map((b) => b.textContent);
-  return { doc, container, eventTarget, events, controller, panel, isOpen, clickButton, message, emit, photoQueries, questionTexts };
+  return { doc, container, eventTarget, events, controller, panel, isOpen, clickButton, message, emit, photoQueries, questionTexts, reportImageRequests };
 }
 
 describe("studentModeController", () => {
@@ -277,13 +280,19 @@ describe("studentModeController", () => {
     assert.equal(received.saved, true);
     assert.equal(received.cfg.html2canvas.backgroundColor, "#ffffff");
     assert.equal(received.cfg.html2canvas.useCORS, true);
+    assert.ok(received.cfg.pagebreak.avoid.includes(".homework-report-photo"), "fotoğraf sayfa sınırında bölünmez");
     assert.equal(findByClass(received.el, "homework-report-kicker").textContent, "Küçük Kaşif Ödev Raporu");
-    assert.equal(findByClass(received.el, "homework-report-meta").textContent, "Öğrenci: Ada · Tarih: 15.11.2026");
-    assert.equal(findByClass(received.el, "homework-report-item-title").textContent, "1. Dünya → Mars Işık Gecikmesi");
+    assert.equal(findByClass(received.el, "homework-report-title").textContent, "Gezegenler Ödevi");
+    const chips = findAllByClass(received.el, "homework-report-chip").map((chip) => chip.children.map((c) => c.textContent).join(": "));
+    assert.deepEqual(chips, ["Öğrenci: Ada", "Tarih: 15.11.2026", "Konu: 1"]);
+    assert.equal(findByClass(received.el, "homework-report-item-number").textContent, "01");
+    assert.equal(findByClass(received.el, "homework-report-item-title").textContent, "Dünya → Mars Işık Gecikmesi");
     assert.equal(findByClass(received.el, "homework-report-text").textContent, "Neden gecikme olur?\nÇünkü ışığın bile hızı sınırlı.");
     const reportImg = findByClass(received.el, "homework-report-photo-img");
-    assert.equal(reportImg.getAttribute("src"), NASA_PHOTOS[0].image_url);
-    assert.equal(reportImg.getAttribute("crossorigin"), "anonymous");
+    assert.deepEqual(t.reportImageRequests, [NASA_PHOTOS[0].image_url], "fotoğraf PDF'ten önce indirilir");
+    assert.equal(reportImg.getAttribute("src"), "data:image/jpeg;base64,UkVQT1JU", "PDF'e hazır veri adresi basılır");
+    assert.equal(reportImg.getAttribute("crossorigin"), null);
+    assert.match(findByClass(received.el, "homework-report-footer").textContent, /Aluma uzay keşif platformunda hazırlandı · 15\.11\.2026/);
     assert.equal(t.message(), "PDF indirildi.");
     assert.equal(warnCalls.length, 0);
   });

@@ -1,6 +1,7 @@
 // Ay yüzey sahnesi: Mare Tranquillitatis (Sükûnet Üssü) ovasında gerçek boyutlu Apollo 11 Ay Modülü (Eagle).
 // Güneş Sistemi ile aynı renderer'ı kullanır ama kendi sahnesi/kamerası vardır (1 birim = 1 metre).
 import { destroySceneResources } from './solarSystemBuilder.js';
+import { ASTRONAUT_HEIGHT_M, createLunarAstronauts } from './lunarAstronauts.js';
 import { createLunarSurfaceEnvironment } from './lunarSurfaceEnvironment.js';
 
 export const LUNAR_MODULE_MODEL_URL = '/public/models/apollo_lunar_module.glb';
@@ -96,6 +97,14 @@ export async function createLunarSurfaceScene(deps, renderer, domElement, aspect
   }
   const anchor = new THREE.Vector3();
   let is_destroyed = false;
+  // Armstrong ve Aldrin modülün yanında; büyük model sahneyi bekletmeden arkadan yüklenir
+  const astronauts = createLunarAstronauts(THREE, scene, gltfLoader, {
+    modelUrl: options.astronautModelUrl,
+    lookAt_m: LUNAR_SURFACE_VIEW_OFFSET_M,
+    scaleModel: (root) => handleLunarModuleScale(THREE, root, ASTRONAUT_HEIGHT_M),
+    disposeModel: (root) => destroySceneResources(root),
+    isCancelled: () => is_destroyed,
+  });
 
   function getModuleAnchor() {
     return anchor.set(moduleRoot.position.x, LUNAR_MODULE_LOOK_HEIGHT_M, moduleRoot.position.z);
@@ -133,6 +142,7 @@ export async function createLunarSurfaceScene(deps, renderer, domElement, aspect
     controls,
     is_module_ready: Boolean(model),
     module_size_m,
+    astronauts_ready: astronauts.ready,
     getModuleAnchor,
     handleSurfaceFrame,
     handleSurfaceResize,

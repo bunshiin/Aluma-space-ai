@@ -57,7 +57,7 @@ export function getAnswerText(route, isStudentMode) {
  * Soru ve cevaptan ödev öğesi kurar; cevap kullanılamazsa null. getText: states.json metinleri,
  * getImageQuery(hedef): Gemini image_query vermediğinde hedef cismin (target_object) fotoğraf arama terimi.
  */
-export function createAnswerHomeworkItem(question, route, { isStudentMode = false, getText = () => "", getImageQuery = () => "" } = {}) {
+export function createAnswerHomeworkItem(question, route, { isStudentMode = false, getText = () => "", getImageQuery = () => "", intentImageQuery = "" } = {}) {
   const safeQuestion = cleanText(question);
   if (!safeQuestion || !hasUsableAnswer(route)) return null;
   const params = route.parameters || {};
@@ -70,8 +70,9 @@ export function createAnswerHomeworkItem(question, route, { isStudentMode = fals
     student_description: getAnswerText(route, true),
     text: getAnswerText(route, isStudentMode),
     facts: [...(questionLabel ? [{ label: questionLabel, value: safeQuestion }] : []), ...routeFacts],
-    image_query: cleanText(params.image_query) || cleanText(getImageQuery(toTargetKey(params.target_object || params.camera_target)))
-      || cleanText(params.title) || safeQuestion,
-    photo: getRouteImage(params)
+    // Sorudaki net niyet (ör. Satürn V roketi) cevabın fotoğrafından önce gelir: gezegen fotoğrafı karışmasın
+    image_query: cleanText(intentImageQuery) || cleanText(params.image_query)
+      || cleanText(getImageQuery(toTargetKey(params.target_object || params.camera_target))) || cleanText(params.title) || safeQuestion,
+    photo: cleanText(intentImageQuery) ? null : getRouteImage(params)
   };
 }

@@ -12,6 +12,7 @@ import { createSpeechController } from "./ui/speechController.js";
 import { createVoicePlayer } from "./ui/voicePlayer.js";
 import { createSubtitleController } from "./ui/subtitleController.js";
 import { createStudentModeController } from "./ui/studentModeController.js";
+import { cycleHudSize, setPressedState, togglePressedState } from "./ui/settingsToggles.js";
 import { isHomeworkIntent, removeHomeworkIntent, stripHomeworkIntent } from "./ui/routeFallbackParser.js";
 import { requestTopicImage } from "./ui/topicImageClient.js";
 
@@ -49,31 +50,6 @@ export function submitTextCommand(doc, rawText) {
   const inputEl = doc.getElementById("command-input");
   if (inputEl) inputEl.value = "";
   return result;
-}
-
-function setPressedState(buttonEl, isActive) {
-  if (!buttonEl) return;
-  buttonEl.classList.toggle("is-active", isActive);
-  buttonEl.setAttribute("aria-pressed", String(isActive));
-}
-
-function togglePressedState(buttonEl) {
-  if (!buttonEl) return;
-  setPressedState(buttonEl, !buttonEl.classList.contains("is-active"));
-}
-
-function cycleHudSize(hudEl) {
-  if (!hudEl) return;
-  if (!hudEl.classList.contains("is-expanded") && !hudEl.classList.contains("is-minimized")) {
-    hudEl.classList.add("is-expanded");
-    return;
-  }
-  if (hudEl.classList.contains("is-expanded")) {
-    hudEl.classList.remove("is-expanded");
-    hudEl.classList.add("is-minimized");
-    return;
-  }
-  hudEl.classList.remove("is-minimized");
 }
 
 function hasAsyncContracts(c) {

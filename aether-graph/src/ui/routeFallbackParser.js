@@ -63,7 +63,7 @@ export const SOLAR_TARGET_RULES = [
 
 // Güneş Sisteminde yeri olmayan modeller tekil görev sahnesinde açılır
 export const SPACECRAFT_RULES = [
-  [/saturn\s*(v|5)|roket/, "saturn_v"],
+  [/sat[üu]rn\s*(?:v|5)\b|roket/, "saturn_v"],
   [/astronot|suit|k[ıi]yafet|elbise/, "advanced_crew_escape_suit"]
 ];
 
@@ -79,7 +79,8 @@ export const BODY_RULES = [
  * Metin içinde geçen gök cismi kimliklerini yazıldığı sıraya göre çıkarır.
  */
 export function extractBodiesFromText(text) {
-  const cleaned = String(text || "").toLocaleLowerCase("tr-TR").replace(/\u0307/g, "").replace(/ı/g, "i").replace(/g[üu]ne[şs]\s*sistemi|solar\s*system/g, " ");
+  const cleaned = String(text || "").toLocaleLowerCase("tr-TR").replace(/\u0307/g, "").replace(/ı/g, "i").replace(/g[üu]ne[şs]\s*sistemi|solar\s*system/g, " ")
+    .replace(/sat[üu]rn\s*(?:v|5)\b/g, " ");
   const hits = BODY_RULES.filter(([, id]) => id !== "SOLAR_SYSTEM_OVERVIEW")
     .map(([re, id]) => ({ id, match: cleaned.match(re) }))
     .filter((entry) => entry.match)

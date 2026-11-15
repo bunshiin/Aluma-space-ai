@@ -1,7 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { applyComparisonEnrichment, isHomeworkIntent, removeHomeworkIntent, resolveFallbackActionType, stripHomeworkIntent } from "../src/ui/routeFallbackParser.js";
+import {
+  applyComparisonEnrichment,
+  extractBodiesFromText,
+  isHomeworkIntent,
+  removeHomeworkIntent,
+  resolveFallbackActionType,
+  resolveFallbackSceneParams,
+  stripHomeworkIntent
+} from "../src/ui/routeFallbackParser.js";
 
 test("ödeve ekleme niyeti yakalanır, 'ödevimi göster' sepeti açar", () => {
   for (const text of ["Ay yerçekimini ödevime ekle", "ödeve ekle", "ödev sepetine ekle", "Ödevlerime kaydet", "add this to my homework"]) {
@@ -44,6 +52,12 @@ test("aynı cisim (MOON vs MOON) kendisiyle kıyaslanmaz, tek cisim yerçekimi k
   const fromTarget = { target: "MOON" };
   assert.equal(applyComparisonEnrichment({ action_type: "FOCUS_OBJECT" }, fromTarget, "MOON", "GRAVITY_SIM"), "SHOW_FACT_CARD");
   assert.equal(fromTarget.camera_target, "MOON");
+});
+
+test("'Satürn 5' roket modeline gider, Satürn gezegeni olarak sayılmaz", () => {
+  assert.deepEqual(resolveFallbackSceneParams("Satürn 5 roketini göster"), { model_url: "/public/models/saturn_v.glb" });
+  assert.deepEqual(resolveFallbackSceneParams("Satürn halkaları"), { model_url: "SOLAR_SYSTEM", camera_target: "SATURN" });
+  assert.deepEqual(extractBodiesFromText("Satürn 5 ve Ay"), ["MOON"]);
 });
 
 test("farklı iki cisim karşılaştırması bozulmaz", () => {

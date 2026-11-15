@@ -150,3 +150,56 @@ test('POST /api/tts: ses yoksa nedeni X-Tts-Reason başlığıyla bildirir', asy
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('POST /api/topic-image: sorguyu kısaltıp fotoğraf bulucuya iletir, bulunamazsa boş obje döner', async () => {
+  const calls = [];
+  const getTopicImage = async (query, title) => {
+    calls.push([query, title]);
+    return query === 'Moon' ? { image_url: 'https://upload.wikimedia.org/moon.jpg', image_source: 'Wikipedia (en)' } : null;
+  };
+  const server = createRouteServer({ getRoute: async () => ({}), getTopicImage });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const send = (body, method = 'POST') => fetch(`${base}/api/topic-image`, { method, headers: { 'Content-Type': 'application/json' }, body });
+    const found = await send(JSON.stringify({ query: 'Moon', title: 'Ay', gizli: 'x' }));
+    assert.equal(found.status, 200);
+    assert.equal((await found.json()).image_url, 'https://upload.wikimedia.org/moon.jpg');
+    assert.deepEqual(await (await send(JSON.stringify({ query: 'Bilinmeyen' }))).json(), {});
+    assert.deepEqual(await (await send(JSON.stringify({ query: 5 }))).json(), {});
+    assert.equal((await send('{bozuk')).status, 400);
+    assert.equal((await send(undefined, 'GET')).status, 405);
+    assert.equal((await send(JSON.stringify({ query: 'x'.repeat(500) }))).status, 200);
+    assert.equal(calls.at(-1)[0].length, 100);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('GET /api/image-proxy: izinli resmi aktarır, hatada durum kodunu döner, POST reddedilir', async () => {
+  const seen = [];
+  const server = createRouteServer({
+    getRoute: async () => ({}),
+    getProxiedImage: async (imageUrl) => {
+      seen.push(imageUrl);
+      if (imageUrl.includes('nasa.gov')) return { status: 200, content_type: 'image/jpeg', body: Buffer.from([1, 2, 3]) };
+      return { status: 400 };
+    },
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const target = 'https://images-assets.nasa.gov/image/a/a~small.jpg';
+    const ok = await fetch(`${base}/api/image-proxy?url=${encodeURIComponent(target)}`);
+    assert.equal(ok.status, 200);
+    assert.equal(ok.headers.get('content-type'), 'image/jpeg');
+    assert.equal(ok.headers.get('x-content-type-options'), 'nosniff');
+    assert.deepEqual([...new Uint8Array(await ok.arrayBuffer())], [1, 2, 3]);
+    assert.equal((await fetch(`${base}/api/image-proxy?url=${encodeURIComponent('https://example.com/a.jpg')}`)).status, 400);
+    assert.equal((await fetch(`${base}/api/image-proxy`)).status, 400);
+    assert.equal((await fetch(`${base}/api/image-proxy`, { method: 'POST' })).status, 405);
+    assert.deepEqual(seen, [target, 'https://example.com/a.jpg', '']);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

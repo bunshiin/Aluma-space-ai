@@ -152,6 +152,11 @@
     "report_student_label": "Öğrenci",
     "report_date_label": "Tarih",
     "report_unknown_student": "İsimsiz Kaşif",
+    "report_brand": "ALUMA · UZAY KEŞİF PLATFORMU",
+    "report_topic_count_label": "Konu",
+    "report_facts_title": "Bilgi Kutusu",
+    "report_footer": "Bu rapor Aluma uzay keşif platformunda hazırlandı",
+    "report_page_label": "Sayfa",
     "photo_alt": "{topic} ile ilgili fotoğraf",
     "photo_loading": "NASA arşivinden fotoğraf aranıyor…",
     "photo_fallback_source": "Çevrimdışı görsel (NASA fotoğrafı bulunamadı)",
@@ -187,7 +192,28 @@
     "PERSEVERANCE": "Perseverance", "CURIOSITY": "Curiosity", "PATHFINDER": "Pathfinder", "INGENUITY": "Ingenuity",
     "MARS_PHOTO_SAT": "Mars Keşif Uydusu (MRO)", "ISS": "Uluslararası Uzay İstasyonu", "HUBBLE": "Hubble Uzay Teleskobu",
     "JWST": "James Webb Uzay Teleskobu", "PARKER": "Parker Güneş Sondası", "NEW_HORIZONS": "New Horizons",
-    "VOYAGER_1": "Voyager 1", "VOYAGER_2": "Voyager 2", "APOLLO_LUNAR_MODULE": "Apollo Ay Modülü"
+    "VOYAGER_1": "Voyager 1", "VOYAGER_2": "Voyager 2", "APOLLO_LUNAR_MODULE": "Apollo Ay Modülü",
+    "SATURN_V": "Satürn V Roketi", "CREW_SUIT": "Astronot Uzay Kıyafeti"
+  },
+  "vehicle_texts": {
+    "SATURN_V": {
+      "description": "Satürn V, NASA'nın Apollo görevlerinde astronotları Ay'a götüren üç kademeli dev fırlatma roketidir. 1967 ile 1973 arasında 13 kez fırlatılmıştır.",
+      "student_description": "Satürn V, astronotları Ay'a götüren dev bir roketti. Üç parçadan oluşuyordu ve her parça işini bitirince atılıyordu.",
+      "facts": [
+        { "label": "Yükseklik", "value": "110,6 m" },
+        { "label": "Kademe sayısı", "value": "3" },
+        { "label": "Fırlatma sayısı", "value": "13" },
+        { "label": "Görevler", "value": "Apollo ve Skylab" }
+      ]
+    },
+    "CREW_SUIT": {
+      "description": "Gelişmiş Mürettebat Kaçış Kıyafeti, fırlatma ve iniş sırasında Uzay Mekiği astronotlarının giydiği turuncu basınçlı kıyafettir.",
+      "student_description": "Bu turuncu kıyafet, roket havalanırken ve inerken astronotları korur. Turuncu olması kurtarma ekiplerinin onları kolay görmesi içindir.",
+      "facts": [
+        { "label": "Renk", "value": "Turuncu" },
+        { "label": "Kullanan", "value": "Uzay Mekiği astronotları" }
+      ]
+    }
   },
   "image_queries": {
     "SUN": "Sun solar dynamics observatory", "MERCURY": "Mercury MESSENGER", "VENUS": "Venus", "EARTH": "Earth from space",
@@ -195,7 +221,8 @@
     "URANUS": "Uranus", "NEPTUNE": "Neptune Voyager", "PLUTO": "Pluto New Horizons",
     "PERSEVERANCE": "Perseverance rover", "CURIOSITY": "Curiosity rover", "INGENUITY": "Ingenuity helicopter",
     "ISS": "International Space Station", "HUBBLE": "Hubble Space Telescope", "JWST": "James Webb Space Telescope",
-    "VOYAGER_1": "Voyager spacecraft", "VOYAGER_2": "Voyager spacecraft", "APOLLO_LUNAR_MODULE": "Apollo 11 lunar module"
+    "VOYAGER_1": "Voyager spacecraft", "VOYAGER_2": "Voyager spacecraft", "APOLLO_LUNAR_MODULE": "Apollo 11 lunar module",
+    "SATURN_V": "Saturn V rocket", "CREW_SUIT": "Advanced Crew Escape Suit orange"
   },
   "example_questions": {
     "DEFAULT": ["Güneş Sistemi'nde kaç gezegen var?", "Dünya'dan Mars'a ışık kaç dakikada gider?", "En büyük gezegen hangisi?"],
