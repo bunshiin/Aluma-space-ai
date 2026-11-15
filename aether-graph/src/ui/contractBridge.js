@@ -128,8 +128,10 @@ export async function enrichRoutePayload(routeJson, contracts = {}, rawQuery = "
   const normalized = normalizeGeminiRoute(routeJson, rawQuery);
   // Ödeve ekleme sahne açmaz: karşılaştırma/odak/veri zenginleştirmesi yapılmadan sadece konu metni taşınır
   if (normalized.action_type === "ADD_TO_HOMEWORK") {
-    const query = String(rawQuery || normalized.parameters.query || normalized.parameters.title || "").trim();
-    return { ...normalized, template_id: "NONE", parameters: query ? { query } : {} };
+    // Cevap alanları (başlık, açıklama, veriler, fotoğraf) karta yazılsın diye kalır; sahne alanları atılır
+    const { model_url: _m, modelUrl: _u, camera_target: _c, primary_object: _p, secondary_object: _s, supporting_photo: _f, ...answerParams } = normalized.parameters;
+    const query = String(rawQuery || answerParams.query || answerParams.title || "").trim();
+    return { ...normalized, template_id: "NONE", parameters: query ? { ...answerParams, query } : answerParams };
   }
   // Genel soru: Güneş Sistemi'nde odak/sahne seçimi yapılmaz, sadece geniş bilgi penceresi açılır
   if (normalized.parameters.is_general_question === true && !Array.isArray(normalized.parameters.events)) {

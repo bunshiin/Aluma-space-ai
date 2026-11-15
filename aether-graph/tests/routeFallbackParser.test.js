@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { applyComparisonEnrichment, isHomeworkIntent, resolveFallbackActionType, stripHomeworkIntent } from "../src/ui/routeFallbackParser.js";
+import { applyComparisonEnrichment, isHomeworkIntent, removeHomeworkIntent, resolveFallbackActionType, stripHomeworkIntent } from "../src/ui/routeFallbackParser.js";
 
 test("ödeve ekleme niyeti yakalanır, 'ödevimi göster' sepeti açar", () => {
   for (const text of ["Ay yerçekimini ödevime ekle", "ödeve ekle", "ödev sepetine ekle", "Ödevlerime kaydet", "add this to my homework"]) {
@@ -12,6 +12,22 @@ test("ödeve ekleme niyeti yakalanır, 'ödevimi göster' sepeti açar", () => {
   assert.equal(resolveFallbackActionType("ödevimi göster"), "SHOW_HOMEWORK_BASKET");
   assert.equal(resolveFallbackActionType("ödev sepeti pdf indir"), "EXPORT_PDF");
   assert.equal(stripHomeworkIntent("Bunu da Mars yerçekimini ödevime ekle!"), "Mars yerçekimini");
+});
+
+test("konu 'ödevime' ile 'ekle' arasında da olabilir; soru metni korunur", () => {
+  const cases = [
+    ["ödevime apollo 11 in çektiği siyah beyaz fotoğraflardan ekle", "apollo 11 in çektiği siyah beyaz fotoğraflardan"],
+    ["Ödevime Jüpiter'in uydularını ekler misin", "Jüpiter'in uydularını"],
+    ["Hubble nerede, ödevime ekle", "Hubble nerede"],
+    ["ödev sepetime Satürn'ün halkalarını kaydet", "Satürn'ün halkalarını"],
+    ["ödevime ekle", ""]
+  ];
+  for (const [text, question] of cases) {
+    assert.equal(isHomeworkIntent(text), true, text);
+    assert.equal(removeHomeworkIntent(text), question, text);
+  }
+  assert.equal(stripHomeworkIntent("bunu da ödevime ekle"), "", "sadece dolgu kelimesi kalırsa konu yok sayılır");
+  assert.equal(isHomeworkIntent("ödevimi göster"), false);
 });
 
 test("aynı cisim (MOON vs MOON) kendisiyle kıyaslanmaz, tek cisim yerçekimi kartı açılır", () => {

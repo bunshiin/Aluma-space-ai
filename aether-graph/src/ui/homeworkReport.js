@@ -2,6 +2,20 @@
 
 import { exportHomeworkPdf } from "./pdfExporter.js";
 
+const PDF_REASON_TEXT_KEYS = Object.freeze({
+  EMPTY_BASKET: "export_empty_warning",
+  MISSING_LIBRARY: "export_missing_library",
+  MISSING_ELEMENT: "export_failed",
+  EXPORT_ERROR: "export_failed"
+});
+
+/**
+ * PDF sonucuna karşılık gelen states.json metin anahtarını döner (panelde gösterilecek mesaj).
+ */
+export function getPdfResultTextKey(result) {
+  return result?.exported ? "export_success" : PDF_REASON_TEXT_KEYS[result?.reason] || "export_failed";
+}
+
 function createElement(doc, tag, className, text) {
   const el = doc.createElement(tag);
   el.className = className;
@@ -80,8 +94,13 @@ export function createHomeworkReportElement(doc, { items, student_name, homework
 
 /**
  * Raporu kurup html2pdf ile indirir; sonuç pdfExporter ile aynı biçimdedir ({ exported, reason?, filename? }).
+ * Sepet boşsa PDF denenmez.
  */
 export async function exportHomeworkReport({ doc, items, profile, getText, date, html2pdf, pdfEnv }) {
+  if (!Array.isArray(items) || items.length === 0) {
+    console.warn("Ödev sepeti boş, PDF oluşturulmadı.");
+    return { exported: false, reason: "EMPTY_BASKET" };
+  }
   const date_text = getReportDateText(date);
   const reportEl = doc ? createHomeworkReportElement(doc, { items, ...profile, date_text, getText }) : null;
   return exportHomeworkPdf(reportEl, {

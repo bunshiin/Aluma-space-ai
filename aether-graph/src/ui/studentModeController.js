@@ -6,20 +6,15 @@ import { createExampleQuestions } from "./exampleQuestions.js";
 import { isAcceptedImageFile, readImageFileAsDataUrl } from "./homeworkBasketCard.js";
 import { createHomeworkEventCapture } from "./homeworkEventCapture.js";
 import { createHomeworkPhotoLoader } from "./homeworkPhotoLoader.js";
-import { exportHomeworkReport } from "./homeworkReport.js";
+import { createAnswerHomeworkItem, hasUsableAnswer } from "./homeworkAnswer.js";
+import { exportHomeworkReport, getPdfResultTextKey } from "./homeworkReport.js";
 import { createTopicHomeworkItem, resolveHomeworkTopic } from "./homeworkTopic.js";
+import { removeHomeworkIntent, stripHomeworkIntent } from "./routeFallbackParser.js";
 import { createStudentPanel } from "./studentPanel.js";
 
 export const STUDENT_MODE_CHANGED_EVENT = "ag:student-mode-changed";
 export const HOMEWORK_ADDED_EVENT = "ag:homework-added";
 export const STUDENT_PANEL_VIEWS = Object.freeze(["STUDENT_MODE", "HOMEWORK_PROMPT", "HOMEWORK_BASKET"]);
-
-const PDF_REASON_TEXT_KEYS = Object.freeze({
-  EMPTY_BASKET: "export_empty_warning",
-  MISSING_LIBRARY: "export_missing_library",
-  MISSING_ELEMENT: "export_failed",
-  EXPORT_ERROR: "export_failed"
-});
 
 function dispatchAgEvent(eventTarget, eventName, detail) {
   if (typeof eventTarget?.dispatchEvent !== "function" || typeof CustomEvent !== "function") return;
@@ -42,6 +37,8 @@ export function createStudentModeController(options = {}) {
   let currentView = null;
   let pendingAddItem = null;
   let isDestroyed = false;
+  // "ödevime ekle" tek başına söylenirse son sorulan sorunun cevabı eklenir (henüz sepette değilse)
+  let lastAnswer = null;
 
   const describe = (item) => (machine.isStudentMode()
     ? item.student_description || item.description
@@ -113,9 +110,7 @@ export function createStudentModeController(options = {}) {
     showView({ name: "HOMEWORK_BASKET" }, () => panel.showBasket(machine.getHomeworkItems()));
   }
 
-  /**
-   * Öğrenci modunu değiştirir ve ag:student-mode-changed yayınlar. source: "panel" | "router".
-   */
+  // Öğrenci modunu değiştirir ve ag:student-mode-changed yayınlar. source: "panel" | "router".
   function setStudentMode(isStudentMode, source = "panel") {
     if (!machine.setStudentMode(isStudentMode === true)) return false;
     const is_student_mode = machine.isStudentMode();
@@ -155,20 +150,10 @@ export function createStudentModeController(options = {}) {
     return task;
   }
 
-  async function handlePhotoFile(id, file) {
-    if (!isAcceptedImageFile(file)) {
-      panel.showMessage(getText("photo_upload_invalid"), "warning");
-      return null;
-    }
-    return trackPhoto(id, async () => {
-      try {
-        const image_url = await readFileAsDataUrl(file);
-        return { image_url, image_title: String(file.name || ""), image_source: getText("photo_user_source") };
-      } catch (err) {
-        console.warn("Görsel dosyası okunamadı:", err);
-        return null;
-      }
-    });
+  function handlePhotoFile(id, file) {
+    if (isAcceptedImageFile(file)) return trackPhoto(id, () => photoLoader.loadUserPhoto(file, readFileAsDataUrl, getText("photo_user_source")));
+    panel.showMessage(getText("photo_upload_invalid"), "warning");
+    return Promise.resolve(null);
   }
 
   /**
@@ -195,6 +180,11 @@ export function createStudentModeController(options = {}) {
    */
   function handleAddToHomework(parameters) {
     const query = typeof parameters.query === "string" ? parameters.query.trim() : "";
+    const isBareRequest = query ? !stripHomeworkIntent(query) : !machine.createHomeworkItemFromParameters(parameters);
+    if (isBareRequest && lastAnswer && !lastAnswer.is_added) return addAnswer(lastAnswer.question, lastAnswer.route);
+    // Gemini ADD_TO_HOMEWORK rotası cevabın kendisini (açıklama, veriler, fotoğraf) taşıyorsa o yazılır
+    const routeAnswer = { action_type: "ADD_TO_HOMEWORK", speech_text: "", parameters };
+    if (query && !isBareRequest && hasUsableAnswer(routeAnswer)) return addAnswer(removeHomeworkIntent(query) || query, routeAnswer);
     const context = capture.getContext();
     const item = query
       ? createTopicHomeworkItem(resolveHomeworkTopic(query, context), machine)
@@ -208,25 +198,37 @@ export function createStudentModeController(options = {}) {
     return addItem(item, { show_basket: true });
   }
 
-  /**
-   * Sepetteki öğelerden Küçük Kaşif Ödev Raporu PDF'i üretir; hata fırlatmaz, sorunu panelde gösterir.
-   */
+  // Sepetteki öğelerden Küçük Kaşif Ödev Raporu PDF'i üretir; hata fırlatmaz, sorunu panelde gösterir.
   async function exportPdf() {
-    const items = machine.getHomeworkItems();
-    let result;
-    if (items.length === 0) {
-      console.warn("Ödev sepeti boş, PDF oluşturulmadı.");
-      result = { exported: false, reason: "EMPTY_BASKET" };
-    } else {
-      result = await exportHomeworkReport({
-        doc: options.container?.ownerDocument, items, profile, getText, date: options.now?.() ?? new Date(),
-        html2pdf: options.html2pdf, pdfEnv: options.pdfEnv
-      });
-    }
+    const result = await exportHomeworkReport({
+      doc: options.container?.ownerDocument, items: machine.getHomeworkItems(), profile, getText,
+      date: options.now?.() ?? new Date(), html2pdf: options.html2pdf, pdfEnv: options.pdfEnv
+    });
     if (!panel.isOpen() || currentView?.name !== "HOMEWORK_BASKET") showBasket();
-    const textKey = result.exported ? "export_success" : PDF_REASON_TEXT_KEYS[result.reason] || "export_failed";
-    panel.showMessage(getText(textKey), result.exported ? "success" : "warning");
+    panel.showMessage(getText(getPdfResultTextKey(result)), result.exported ? "success" : "warning");
     return result;
+  }
+
+  // Gemini'nin bir soruya verdiği son cevabı hatırlar ("bunu ödevime ekle" bu cevabı ekler).
+  function recordAnswer(question, route) {
+    if (typeof question === "string" && question.trim() && hasUsableAnswer(route)) lastAnswer = { question: question.trim(), route, is_added: false };
+  }
+
+  // Soru Gemini'ye giderken paneli açıp bekleme mesajı gösterir.
+  function beginAnswer(question) {
+    showBasket();
+    panel.showMessage(getText("answer_pending", { question }));
+  }
+
+  // Soru + Gemini cevabını (cevapla gelen fotoğrafla birlikte) karta ekler; cevap yoksa null döner.
+  function addAnswer(question, route) {
+    const item = createAnswerHomeworkItem(question, route, {
+      isStudentMode: machine.isStudentMode(), getText, getImageQuery: (key) => machine.getImageQuery(key, "")
+    });
+    if (!item) return null;
+    recordAnswer(question, route);
+    if (lastAnswer) lastAnswer.is_added = true;
+    return addItem(item, { show_basket: true });
   }
 
   /**
@@ -270,6 +272,10 @@ export function createStudentModeController(options = {}) {
     handleAction,
     setStudentMode,
     addItem,
+    addAnswer,
+    beginAnswer,
+    recordAnswer,
+    showMessage: (textKey) => panel.showMessage(getText(textKey), "warning"),
     exportPdf,
     isPanelOpen: () => panel.isOpen(),
     waitForPhotos: () => Promise.all([...pendingPhotos]),

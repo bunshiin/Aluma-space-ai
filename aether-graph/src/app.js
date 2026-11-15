@@ -12,7 +12,7 @@ import { createSpeechController } from "./ui/speechController.js";
 import { createVoicePlayer } from "./ui/voicePlayer.js";
 import { createSubtitleController } from "./ui/subtitleController.js";
 import { createStudentModeController } from "./ui/studentModeController.js";
-import { isHomeworkIntent } from "./ui/routeFallbackParser.js";
+import { isHomeworkIntent, removeHomeworkIntent, stripHomeworkIntent } from "./ui/routeFallbackParser.js";
 import { requestTopicImage } from "./ui/topicImageClient.js";
 
 const HOMEWORK_ACTIONS = new Set(["ADD_TO_HOMEWORK", "SHOW_HOMEWORK_BASKET", "EXPORT_PDF"]);
@@ -104,7 +104,8 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
     getTopicImage: (query, title) => requestTopicImage(query, title),
     onBasketChange: (count) => syncHomeworkVisibility(doc, count),
     getSpaceData: () => bridge?.getContracts().getSpaceData,
-    onAskQuestion: (question) => runCommand(question),
+    // Örnek soruya tıklanınca soru normal akışta cevaplanır ve verilen cevap ödeve de eklenir
+    onAskQuestion: (question) => runCommand(question, { add_answer_to_homework: true }),
     onStudentModeChange: (isStudentMode, source) => {
       setPressedState(studentToggleBtn, isStudentMode);
       // Panelden gelen seçim HUD'a da router üzerinden iletilir; router kaynaklıysa HUD zaten güncel
@@ -135,29 +136,72 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
     if (route?.action_type === "RESET_VIEW") {
       answerPanel.close();
       subtitle.hide();
-    } else if (answerPanel.showRoute(route)) subtitle.hide();
-    else subtitle.show(route?.speech_text);
+    } else if (answerPanel.showRoute(route)) {
+      subtitle.hide();
+      sidePanelEl?.classList.add("is-hidden");
+      sidePanelEl?.setAttribute?.("aria-hidden", "true");
+      popupElements.container?.classList.add("is-hidden");
+      popupElements.container?.setAttribute?.("aria-hidden", "true");
+      byId("overlay-card-container")?.classList.add("is-hidden");
+      byId("overlay-card-container")?.setAttribute?.("aria-hidden", "true");
+    } else subtitle.show(route?.speech_text);
     if (result?.action_type === "RESET_VIEW" && !result?.has_active_scene) openDefaultSolarSystem("SUN");
     return result;
   };
 
-  const runCommand = (rawText) => {
+  const addLocalHomework = (trimmed, isStudentMode) =>
+    applyResolvedRoute({ action_type: "ADD_TO_HOMEWORK", template_id: "NONE", parameters: { query: trimmed }, speech_text: "", is_student_mode: isStudentMode });
+
+  // "Hubble nerede, ödevime ekle": soru Gemini'ye (öğrenci moduna göre) sorulur, sahne değişmez; cevap ve cevapla
+  // gelen fotoğraf ödev kartına yazılır. Gemini'ye ulaşılamazsa konu uygulamanın kendi hesabıyla eklenir.
+  const askForHomework = (trimmed, isStudentMode) => {
+    const question = removeHomeworkIntent(trimmed);
+    if (!stripHomeworkIntent(trimmed) || !hasAsyncContracts(bridge.getContracts())) return addLocalHomework(trimmed, isStudentMode);
+    studentMode.beginAnswer(question);
+    if (statusBadgeEl) statusBadgeEl.textContent = "AI_ROUTING";
+    return bridge.resolveUserCommand(question, isStudentMode)
+      .then((route) => addAnswerToHomework(question, trimmed, route, isStudentMode))
+      .catch((err) => {
+        console.warn("Ödev sorusu yanıtlanamadı:", err);
+        return addAnswerToHomework(question, trimmed, null, isStudentMode);
+      });
+  };
+
+  // Gemini cevabını karta yazar ve seslendirir; cevap yoksa konu uygulamanın kendi hesabıyla eklenir
+  const addAnswerToHomework = (question, trimmed, route, isStudentMode) => {
+    if (statusBadgeEl) statusBadgeEl.textContent = "ADD_TO_HOMEWORK";
+    const result = route ? studentMode.addAnswer(question, route) : null;
+    if (!result) {
+      addLocalHomework(trimmed, isStudentMode);
+      studentMode.showMessage("answer_failed");
+      return null;
+    }
+    subtitle.show(route.speech_text);
+    voice.speak(route.speech_text);
+    return result;
+  };
+
+  const runCommand = (rawText, { add_answer_to_homework = false } = {}) => {
     const trimmed = String(rawText || "").trim();
     if (!trimmed) return null;
     const isStudentMode = studentToggleBtn?.classList.contains("is-active") ?? false;
-    // "Ay yerçekimini ödevime ekle": Gemini'ye gitmeden ve sahne değiştirmeden doğrudan ödev paneline yazılır
-    if (isHomeworkIntent(trimmed)) {
-      if (commandInputEl) commandInputEl.value = "";
-      return applyResolvedRoute({ action_type: "ADD_TO_HOMEWORK", template_id: "NONE", parameters: { query: trimmed }, speech_text: "", is_student_mode: isStudentMode });
-    }
     if (commandInputEl) commandInputEl.value = "";
+    if (isHomeworkIntent(trimmed)) return askForHomework(trimmed, isStudentMode);
     subtitle.hide();
     if (!hasAsyncContracts(bridge.getContracts())) {
       return applyResolvedRoute(buildFallbackRoute(trimmed, isStudentMode));
     }
     if (statusBadgeEl) statusBadgeEl.textContent = "AI_ROUTING";
     return bridge.resolveUserCommand(trimmed, isStudentMode)
-      .then((resolved) => applyResolvedRoute(resolved || buildFallbackRoute(trimmed, isStudentMode)))
+      .then((resolved) => {
+        const route = resolved || buildFallbackRoute(trimmed, isStudentMode);
+        // Yerel kalıbın kaçırdığı bir ödev isteğini Gemini yakaladıysa cevabı sahne açmadan karta yazılır
+        if (route.action_type === "ADD_TO_HOMEWORK") return addAnswerToHomework(removeHomeworkIntent(trimmed) || trimmed, trimmed, route, isStudentMode);
+        const result = applyResolvedRoute(route);
+        studentMode.recordAnswer(trimmed, route);
+        if (add_answer_to_homework) studentMode.addAnswer(trimmed, route);
+        return result;
+      })
       .catch((err) => {
         console.warn("Komut yönlendirme hatası:", err);
         return applyResolvedRoute(buildFallbackRoute(trimmed, isStudentMode));

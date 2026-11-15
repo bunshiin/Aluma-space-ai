@@ -329,6 +329,8 @@ describe("studentModeController", () => {
     t.controller.handleAction("SIMPLIFY_TEXT", { is_student_mode: true });
     t.controller.handleAction("ADD_TO_HOMEWORK", { query: "Mars ödevime ekle" });
     assert.ok(t.doc.listenerTotal > 0);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(typeof resolvePhoto, "function", "NASA fotoğraf isteği yolda");
 
     t.controller.destroy();
     assert.equal(t.eventTarget.getActiveCount(), baseline - 7, "sadece testin kendi 2 dinleyicisi kalır");
@@ -343,6 +345,63 @@ describe("studentModeController", () => {
     assert.equal(t.container.children.length, 0, "destroy sonrası fotoğraf yanıtı DOM'a dokunmaz");
     t.emit("ag:light-delay-status", { ...LIGHT_DELAY_DETAIL, phase: "COMPLETE" });
     assert.equal(t.container.children.length, 0, "destroy sonrası olay paneli yeniden açmaz");
+  });
+
+  it("Gemini cevabı soruyla gelen fotoğrafla eklenir; NASA araması yapılmaz; 'bunu ödevime ekle' son cevabı ekler", async () => {
+    const t = setup();
+    const route = {
+      speech_text: "Hubble yaklaşık 535 kilometre yükseklikte döner.",
+      parameters: { title: "Hubble Uzay Teleskobu Yörüngesi", description: "Hubble alçak Dünya yörüngesindedir.", image_url: "https://upload.wikimedia.org/hubble.jpg", image_source: "Wikipedia (en)", image_query: "Hubble Space Telescope" }
+    };
+    t.controller.beginAnswer("Hubble nerede?");
+    assert.match(t.message(), /Gemini'ye soruluyor/);
+    const result = t.controller.addAnswer("Hubble nerede?", route);
+    await t.controller.waitForPhotos();
+    assert.equal(result.added, true);
+    assert.deepEqual(t.photoQueries, [], "cevapla gelen fotoğraf varken ayrıca arama yapılmaz");
+    assert.equal(findByClass(t.container, "homework-basket-photo-img").getAttribute("src"), "https://upload.wikimedia.org/hubble.jpg");
+    assert.equal(findByClass(t.container, "homework-basket-card-title").textContent, "Hubble Uzay Teleskobu Yörüngesi");
+
+    t.controller.recordAnswer("Jüpiter'in kaç uydusu var?", { speech_text: "95.", parameters: { title: "Jüpiter'in Uyduları", description: "Jüpiter'in 95 onaylı uydusu var." } });
+    t.controller.handleAction("ADD_TO_HOMEWORK", { query: "bunu ödevime ekle" });
+    await t.controller.waitForPhotos();
+    assert.deepEqual(t.controller.getState().items.map((i) => i.title), ["Hubble Uzay Teleskobu Yörüngesi", "Jüpiter'in Uyduları"]);
+
+    t.emit("ag:focus-target", { target: "SATURN" });
+    t.controller.handleAction("ADD_TO_HOMEWORK", { query: "bunu ödevime ekle" });
+    assert.equal(t.controller.getState().items.at(-1).id, "BODY|SATURN", "cevaptan sonra başka yere bakıldıysa bakılan yer eklenir");
+    assert.equal(t.controller.addAnswer("boş", { speech_text: "yerel yedek", parameters: {} }), null);
+  });
+
+  it("ikinci 'ödevime ekle' de çalışır: her yeni sorunun cevabı ayrı kart olur, aynı cevap tekrar eklenmez", async () => {
+    const t = setup();
+    const answer = (title) => ({ speech_text: `${title} cevabı.`, parameters: { title, description: `${title} açıklaması.`, data_source: "GEMINI" } });
+    t.controller.recordAnswer("Hubble nerede?", answer("Hubble"));
+    t.controller.handleAction("ADD_TO_HOMEWORK", { query: "ödevime ekle" });
+    t.controller.recordAnswer("Apollo 11 nereye indi?", answer("Apollo 11"));
+    t.controller.handleAction("ADD_TO_HOMEWORK", { query: "ödevime ekle" });
+    t.controller.handleAction("ADD_TO_HOMEWORK", { query: "ödevime ekle" });
+    await t.controller.waitForPhotos();
+    assert.deepEqual(t.controller.getState().items.map((i) => i.title), ["Hubble", "Apollo 11"]);
+  });
+
+  it("Gemini'nin kendi ADD_TO_HOMEWORK rotası açıklama ve fotoğrafıyla karta yazılır", async () => {
+    const t = setup();
+    t.controller.handleAction("ADD_TO_HOMEWORK", {
+      query: "ödevime apollo 11 in çektiği siyah beyaz fotoğraflardan ekle",
+      title: "Apollo 11 Ay Yüzeyi",
+      description: "Apollo 11 astronotları Ay yüzeyinde Hasselblad kamerayla fotoğraf çekti.",
+      facts: [{ label: "Kamera", value: "Hasselblad" }],
+      image_url: "https://images-assets.nasa.gov/image/as11-40-5903/as11-40-5903~small.jpg",
+      data_source: "NASA_API"
+    });
+    await t.controller.waitForPhotos();
+    const [item] = t.controller.getState().items;
+    assert.equal(item.title, "Apollo 11 Ay Yüzeyi");
+    assert.match(item.text, /Hasselblad kamerayla/);
+    assert.equal(item.facts[0].value, "apollo 11 in çektiği siyah beyaz fotoğraflardan");
+    assert.equal(item.photo.image_url, "https://images-assets.nasa.gov/image/as11-40-5903/as11-40-5903~small.jpg");
+    assert.deepEqual(t.photoQueries, []);
   });
 
   it("container yoksa çökmez", () => {

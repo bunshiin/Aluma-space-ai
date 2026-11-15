@@ -222,9 +222,11 @@ export function handleActionRouter(json) {
 
   switch (rawAction) {
     case "OPEN_POPUP":
+      closeAllPanels([cachedElements?.sidePanel?.container, cachedElements?.overlayCard]);
       renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc);
       break;
     case "SPLIT_SCREEN":
+      closeOpenPanels();
       if (viewportResult.light_delay && !parameters.light_delay) {
         parameters.light_delay = viewportResult.light_delay;
       }
@@ -232,6 +234,7 @@ export function handleActionRouter(json) {
     case "OPEN_SIDE_PANEL":
       // Öğrenci modu / ödev sepeti görünümleri sağdaki Küçük Kaşif panelinde açılır
       if (typeof parameters.panel_view === "string" && routerConfig.onStudentAction?.(rawAction, parameters) === true) break;
+      closeAllPanels([cachedElements?.popup?.container, cachedElements?.overlayCard]);
       renderSidePanel(
         cachedElements?.sidePanel,
         { ...parameters, template_id: resolvedTemplateId },
@@ -245,6 +248,7 @@ export function handleActionRouter(json) {
       routerConfig.onStudentAction?.(rawAction, parameters);
       break;
     case "SHOW_COMPARISON":
+      closeAllPanels([cachedElements?.sidePanel?.container, cachedElements?.popup?.container]);
       if (parameters?.model_url === "PLANET_COMPARISON" || (!parameters?.model_url && Boolean(parameters?.primary_object || parameters?.secondary_object))) {
         closeOpenPanels();
         break;
@@ -253,6 +257,7 @@ export function handleActionRouter(json) {
       break;
     case "SHOW_TIMELINE":
     case "SHOW_FACT_CARD":
+      closeAllPanels([cachedElements?.sidePanel?.container, cachedElements?.popup?.container]);
       // Fotoğraflı pop-up aynı bilgiyi zaten gösterir; karttan tekrar çizilmez
       if (parameters.supporting_photo === true && parameters.image_url) break;
       renderOverlayCard(cachedElements?.overlayCard, rawAction, resolvedTemplateId, parameters, doc);
@@ -269,9 +274,12 @@ export function handleActionRouter(json) {
     case "EXPAND_HUD":
     case "MINIMIZE_HUD":
     case "SIMPLIFY_TEXT":
+      break;
     case "FOCUS_OBJECT":
     case "PAN_TO":
     case "HIGHLIGHT_OBJECT":
+      closeOpenPanels();
+      break;
     case "PLAY_ANIMATION":
     case "PAUSE_ANIMATION":
       break;

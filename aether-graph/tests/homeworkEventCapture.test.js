@@ -21,14 +21,14 @@ test("sahne olaylarını yakalar, aynı konu için soruyu bir kez ister ve destr
   assert.equal(capture.getListenerCount(), 7, "5 sahne durumu + ag:focus-target + ag:earth-events");
 
   const emit = emitOn(eventTarget);
-  emit("ag:spacecraft-ready", { id: "MRO", action_type: "FOCUS_OBJECT", parameters: {} });
-  emit("ag:spacecraft-ready", { id: "MRO", action_type: "FOCUS_OBJECT" });
+  emit("ag:spacecraft-ready", { id: "MARS_PHOTO_SAT", action_type: "FOCUS_OBJECT", parameters: {} });
+  emit("ag:spacecraft-ready", { id: "MARS_PHOTO_SAT", action_type: "FOCUS_OBJECT" });
   emit("ag:planet-comparison-status", "bozuk");
   emit("ag:apollo-status", { phase: "LANDING", title: "Kartal indi" });
 
   assert.deepEqual(captures, [
-    ["MARS_EXPLORATION|MRO", true],
-    ["MARS_EXPLORATION|MRO", false],
+    ["MARS_EXPLORATION|MARS_PHOTO_SAT", true],
+    ["MARS_EXPLORATION|MARS_PHOTO_SAT", false],
     ["PLANET_COMPARISON", true],
     ["APOLLO_11|LANDING|Kartal indi", true]
   ]);
@@ -64,5 +64,16 @@ test("bağlam: odak hedefi sahne özetini siler, sahne olayı hedefi detail'den 
   emit("ag:focus-target", { target: "<script>" });
   assert.equal(capture.getContext().target, "EARTH", "geçersiz hedef yok sayılır");
   assert.equal(contexts.length, 4);
+  capture.destroy();
+});
+
+test("Mars dışı araç (Hubble) ag:spacecraft-ready ile 'Mars Keşfi' kartı üretmez, sadece bağlamı günceller", () => {
+  const eventTarget = new CountingEventTarget();
+  const captures = [];
+  const capture = createHomeworkEventCapture({ eventTarget, machine: new MissionStateMachine(), onCapture: (item) => captures.push(item.id) });
+  eventTarget.dispatchEvent(new CustomEvent("ag:spacecraft-ready", { detail: { id: "HUBBLE", action_type: "FOCUS_OBJECT" } }));
+  assert.deepEqual(captures, []);
+  assert.equal(capture.getLastItem(), null);
+  assert.deepEqual(capture.getContext(), { target: "HUBBLE", scene_id: null, scene_item: null });
   capture.destroy();
 });

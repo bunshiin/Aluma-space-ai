@@ -479,3 +479,63 @@ describe("ADD_TO_HOMEWORK aktif sahneyi korur", () => {
     assert.equal(homework[0].query, "Ay yerçekimini ödevime ekle");
   });
 });
+
+describe("önceki sorgulardan kalan panellerin otomatik temizlenmesi", () => {
+  it("Hubble sorgusundan sonra deprem veya başka odak açıldığında açık kalan yan panel, kart ve pop-up kapatılır", () => {
+    const mockDoc = createMockDocument();
+    initApp(mockDoc, { skipBootLoading: true });
+
+    const sidePanelEl = mockDoc.getElementById("side-panel-container");
+    const overlayCardEl = mockDoc.getElementById("overlay-card-container");
+    const popupEl = mockDoc.getElementById("popup-container");
+
+    // 1. Hubble sorgusu çalıştırılır (yan panel açılır)
+    handleActionRouter({
+      action_type: "OPEN_SIDE_PANEL",
+      template_id: "NONE",
+      parameters: { title: "Hubble Space Telescope", description: "Hubble uzay teleskobu derin uzayı gözlemler." }
+    });
+    assert.equal(sidePanelEl.classList.contains("is-hidden"), false, "Hubble yan paneli açılmış olmalı");
+
+    // 2. Ardından son depremler / Dünya sorgusu çalıştırılır (FOCUS_OBJECT)
+    handleActionRouter({
+      action_type: "FOCUS_OBJECT",
+      template_id: "NONE",
+      parameters: {
+        model_url: "SOLAR_SYSTEM",
+        camera_target: "EARTH",
+        events: [
+          { id: "eq-1", title: "Deprem M5.2", coordinates: { latitude_deg: 38.4, longitude_deg: 27.1 } }
+        ]
+      }
+    });
+
+    // 3. Hubble'dan kalan yan panel, kart ve popup kapalı olmalı
+    assert.equal(sidePanelEl.classList.contains("is-hidden"), true, "Önceki Hubble yan paneli otomatik gizlenmiş olmalı");
+    assert.equal(overlayCardEl.classList.contains("is-hidden"), true, "Overlay kartı kapalı olmalı");
+    assert.equal(popupEl.classList.contains("is-hidden"), true, "Popup kapalı olmalı");
+  });
+
+  it("bilgi kartı açıkken yeni bir nesneye odaklanıldığında önceki kart kapanır", () => {
+    const mockDoc = createMockDocument();
+    configureActionRouter({ doc: mockDoc });
+
+    const overlayCardEl = mockDoc.getElementById("overlay-card-container");
+
+    // Bilgi kartı aç
+    handleActionRouter({
+      action_type: "SHOW_FACT_CARD",
+      template_id: "NONE",
+      parameters: { title: "Mars Bilgi Kartı", description: "Kızıl gezegen" }
+    });
+    assert.equal(overlayCardEl.classList.contains("is-hidden"), false);
+
+    // Yeni nesneye odaklan (FOCUS_OBJECT)
+    handleActionRouter({
+      action_type: "FOCUS_OBJECT",
+      template_id: "NONE",
+      parameters: { model_url: "SOLAR_SYSTEM", camera_target: "JUPITER" }
+    });
+    assert.equal(overlayCardEl.classList.contains("is-hidden"), true, "Önceki bilgi kartı kapanmış olmalı");
+  });
+});

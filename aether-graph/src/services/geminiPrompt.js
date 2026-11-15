@@ -128,7 +128,7 @@ export function createSystemPrompt(isStudentMode = false, spaceDataContext = nul
   const todayDate = nowIso.split("T")[0];
 
   const modeInstruction = isStudentMode
-    ? "is_student_mode AKTİF: Karşındaki bir öğrenci. speech_text alanını sade, anlaşılır ve merak uyandırıcı şekilde KISA tut (yalnızca 1-2 cümle)."
+    ? "is_student_mode AKTİF: Karşındaki bir öğrenci. speech_text alanını sade, anlaşılır ve merak uyandırıcı şekilde KISA tut (yalnızca 1-2 cümle). parameters.description ve sections metinlerini de ortaokul öğrencisinin anlayacağı yumuşak, sade bir dille yaz (zor terimleri kısaca açıkla); cevap öğrencinin ödevine eklenebilir."
     : "is_student_mode PASİF (Genel Mod): speech_text alanını doğrudan konuya giren, net, bilimsel ve ÖZET bir dille KISA tut (yalnızca 1-2 cümle, gereksiz uzatma yapma).";
 
   const ttsGrammarInstruction =

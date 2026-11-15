@@ -40,7 +40,21 @@ export function createAnswerPanelController(container, texts) {
     return dispatchWindowEvent(EARTH_VIEW_SHIFT_EVENT, { x_px: (container.clientWidth - rect.left) / 2, y_px: 0 });
   }
 
+  function closeLeftPanels() {
+    const doc = container?.ownerDocument || (typeof document !== "undefined" ? document : null);
+    if (!doc?.getElementById) return;
+    const ids = ["side-panel-container", "popup-container", "overlay-card-container"];
+    for (const id of ids) {
+      const el = doc.getElementById(id);
+      if (el) {
+        el.classList.add("is-hidden");
+        el.setAttribute?.("aria-hidden", "true");
+      }
+    }
+  }
+
   function focusEvent(events, event, speechText, dataSource) {
+    closeLeftPanels();
     lastEvents = events;
     panel.showEvent({ events, focus_event: event, speech_text: speechText, data_source: dataSource });
     dispatchWindowEvent(EARTH_EVENTS_EVENT, { events, focus_event_id: event?.id ?? null });
@@ -73,6 +87,7 @@ export function createAnswerPanelController(container, texts) {
       const events = getRouteEvents(route);
       const speechText = typeof route?.speech_text === "string" ? route.speech_text : "";
       if (events.length > 0) {
+        closeLeftPanels();
         const focus = events.find((e) => e.id === route.parameters.focus_event_id) || events[0];
         lastEvents = events;
         panel.showEvent({ events, focus_event: focus, speech_text: speechText, data_source: route.parameters.data_source });

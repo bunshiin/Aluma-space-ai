@@ -114,6 +114,7 @@
         "action_type": "İşlem"
       },
       "id_fields": ["id"],
+      "match_ids": ["MARS_PHOTO_SAT", "PERSEVERANCE", "CURIOSITY", "INGENUITY", "PATHFINDER"],
       "next_actions": [
         { "action": "ADD_TO_HOMEWORK", "label": "Ödeve ekle" },
         { "target_state": "SOLAR_SYSTEM", "label": "Güneş Sistemi" }
@@ -160,6 +161,9 @@
     "photo_upload_invalid": "Sadece 5 MB'tan küçük bir resim dosyası ekleyebilirsin.",
     "text_placeholder": "Bu konu hakkında öğrendiklerini kendi cümlelerinle yaz",
     "homework_need_topic": "Hangi konuyu ekleyeceğimi anlayamadım. Önce bir sahneye bak ya da konuyu yaz (ör. \"Ay yerçekimini ödevime ekle\").",
+    "answer_question_label": "Soru",
+    "answer_pending": "\"{question}\" Gemini'ye soruluyor, cevap ödevine eklenecek…",
+    "answer_failed": "Gemini'den cevap alınamadı; konuyu uygulamanın kendi bilgisiyle ekledim.",
     "questions_title": "Şu an baktığın yer hakkında sorabileceğin örnek sorular",
     "topic_gravity_title": "{body} Yüzey Yerçekimi",
     "topic_gravity_description": "{body} yüzeyinde serbest düşme ivmesi {gravity} m/s²'dir. 10 metre yükseklikten bırakılan bir cisim yaklaşık {fall_s} saniyede yere ulaşır.",

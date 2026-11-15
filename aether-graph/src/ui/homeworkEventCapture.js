@@ -42,11 +42,17 @@ export function createHomeworkEventCapture({ eventTarget = globalThis, machine, 
   function handleStatusEvent(eventName, event) {
     const sceneId = machine.getSceneIdForEvent(eventName);
     const detail = getDetail(event);
+    const step = machine.getStep(sceneId);
+    // ag:spacecraft-ready her araç için gelir; Hubble'a odaklanınca "Mars Keşfi" kartı oluşmasın
+    if (Array.isArray(step?.match_ids) && !step.match_ids.includes(toTargetId(detail?.id))) {
+      const target = toTargetId(detail?.id) || toTargetId(detail?.target);
+      if (target) updateContext({ target, scene_id: null, scene_item: null });
+      return;
+    }
     const item = sceneId ? machine.createHomeworkItem(sceneId, detail) : null;
     if (!item) return;
     lastItem = item;
     machine.handleTransition(sceneId);
-    const step = machine.getStep(sceneId);
     const fieldTarget = CONTEXT_TARGET_FIELDS.map((key) => toTargetId(detail?.[key])).find(Boolean);
     updateContext({ target: fieldTarget || toTargetId(step?.camera_target), scene_id: sceneId, scene_item: item });
     // Aynı konu için soru bir kez sorulur; sepette olan konu tekrar sorulmaz

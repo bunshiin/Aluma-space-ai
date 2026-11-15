@@ -1,5 +1,6 @@
-// Ödev kartlarının fotoğrafını bulur. Sıra: NASA arşivi (getSpaceData("nasa_images")) → sunucudaki konu görseli
-// (getTopicImage) → çevrimdışı yedek görsel.
+// Ödev kartlarının fotoğrafını bulur. Sıra: sunucudaki konu görseli (getTopicImage: önce konunun kendi sayfası,
+// sonra NASA arşivi) → NASA arşivi araması (getSpaceData("nasa_images")) → çevrimdışı yedek görsel.
+// Konu görseli önce gelir: serbest NASA araması konuyla ilgisiz cihaz/laboratuvar fotoğrafları döndürebiliyor.
 
 import { createFallbackSpaceImageDataUri } from "./popupController.js";
 
@@ -9,7 +10,7 @@ function isUsablePhoto(entry) {
 
 /**
  * Yükleyiciyi kurar. getSpaceData: sözleşme fonksiyonunu döndüren fonksiyon (veri katmanı geç yüklenir).
- * getTopicImage(query, title): NASA sonuç vermezse denenen ikinci kaynak. fallbackSource: yedek görsel etiketi.
+ * getTopicImage(query, title): ilk denenen kaynak. fallbackSource: yedek görsel etiketi.
  */
 export function createHomeworkPhotoLoader({ getSpaceData, getTopicImage, fallbackSource = "" } = {}) {
   const candidatesById = new Map();
@@ -31,16 +32,22 @@ export function createHomeworkPhotoLoader({ getSpaceData, getTopicImage, fallbac
     }
   }
 
-  async function fetchCandidates(item) {
-    const nasaList = await fetchNasaCandidates(item);
-    if (nasaList.length > 0 || typeof getTopicImage !== "function" || !item.image_query) return nasaList;
+  async function fetchTopicImage(item) {
+    if (typeof getTopicImage !== "function" || !item.image_query) return null;
     try {
       const topicImage = await getTopicImage(item.image_query, item.title);
-      return isUsablePhoto(topicImage) ? [topicImage] : [];
+      return isUsablePhoto(topicImage) ? topicImage : null;
     } catch (err) {
       console.warn("Konu görseli alınamadı:", err?.message);
-      return [];
+      return null;
     }
+  }
+
+  async function fetchCandidates(item) {
+    const topicImage = await fetchTopicImage(item);
+    // Konu görseli varsa ilk aday odur; "Başka NASA Fotoğrafı" yine NASA aramasının sonuçlarında gezinir
+    const nasaList = await fetchNasaCandidates(item);
+    return topicImage ? [topicImage, ...nasaList] : nasaList;
   }
 
   function pick(item, entry) {
@@ -68,8 +75,21 @@ export function createHomeworkPhotoLoader({ getSpaceData, getTopicImage, fallbac
     return pick(item, entry.list[entry.index]);
   }
 
+  /**
+   * Öğrencinin seçtiği resim dosyasını fotoğraf kaydına çevirir; okunamazsa null.
+   */
+  async function loadUserPhoto(file, readFileAsDataUrl, source) {
+    try {
+      return { image_url: await readFileAsDataUrl(file), image_title: String(file?.name || ""), image_source: source };
+    } catch (err) {
+      console.warn("Görsel dosyası okunamadı:", err);
+      return null;
+    }
+  }
+
   return {
     loadPhoto,
+    loadUserPhoto,
     getNextPhoto,
     forget: (id) => candidatesById.delete(id),
     destroy() {

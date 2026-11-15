@@ -10,8 +10,9 @@ export const GRAVITY_WORD_RE = /yer[çc]ekimi|gravity|a[ğg][ıi]rl[ıi][ğg]?[�
 const GRAVITY_ACTION_RE = /serbest\s*d[üu][şs]|d[üu][şs]me|astronot.*test|yer[çc]ekimi\s*test|gravity\s*(?:sim|test)|ka[çc]\s*(?:kg|kilo)/i;
 export const LIGHT_DELAY_HINT_RE = /[ıi][şs][ıi]k\s*gecik|light\s*delay|sinyal\w*\s.*(s[üu]r|gid|ula[şs]|gecik)|haberle[şs]me\s*gecik/i;
 
-// "ödevime ekle", "ödeve ekle", "ödev sepetine ekle", "ödevlerime kaydet", "add to homework"
-const HOMEWORK_ADD_INTENT_RE = /[öo]dev\p{L}*\s+(?:sepet\p{L}*\s+)?(?:olarak\s+)?(?:ekle|kaydet|koy|at)\p{L}*|add\s+(?:this\s+)?to\s+(?:my\s+)?homework/iu;
+// "… ödevime ekle", "ödevime <konu> ekle", "ödev sepetine ekle", "ödevlerime kaydet", "ödevime ekler misin",
+// "add to homework". Konu fiilden önce de gelebilir; ortadaki konu yakalanıp soruya geri konur.
+const HOMEWORK_ADD_INTENT_RE = /[öo]dev\p{L}*\s+(?:sepet\p{L}*\s+)?(?:olarak\s+)?(?:(.{1,160}?)\s+)?(?:ekle|kaydet|koy)\p{L}*(?:\s+m[ıiuü]s[ıiuü]n(?:\s+l[üu]tfen)?)?|add\s+(?:this\s+)?to\s+(?:my\s+)?homework/iu;
 
 /**
  * Komutta "ödeve ekle" niyeti varsa true döner; bu niyette sahne değişmez, sadece ödev kartı hazırlanır.
@@ -20,12 +21,23 @@ export function isHomeworkIntent(text) {
   return HOMEWORK_ADD_INTENT_RE.test(String(text || ""));
 }
 
+// "ödevime X ekle" → " X ", "X ödevime ekle" → "X  ": niyet kalkar, konu yerinde kalır
+function replaceHomeworkIntent(text) {
+  return String(text || "").replace(HOMEWORK_ADD_INTENT_RE, (match, middle) => ` ${middle || ""} `);
+}
+
+/**
+ * Komuttan sadece "ödevime ekle" ifadesini atar; kalan metin Gemini'ye sorulacak sorunun kendisidir.
+ */
+export function removeHomeworkIntent(text) {
+  return replaceHomeworkIntent(text).replace(/\s+/g, " ").replace(/^[\s,.;:!-]+|[\s,;:-]+$/g, "").trim();
+}
+
 /**
  * Komuttan "ödevime ekle" ifadesini ve dolgu kelimeleri atıp kalan konu metnini döner.
  */
 export function stripHomeworkIntent(text) {
-  return String(text || "")
-    .replace(HOMEWORK_ADD_INTENT_RE, " ")
+  return replaceHomeworkIntent(text)
     .replace(/[.,!?;:]+/g, " ")
     .replace(/(^|\s)(bunu|şunu|sunu|bu|şu|su|konuyu|lütfen|lutfen|da|de)(?=\s|$)/giu, " ")
     .replace(/\s+/g, " ")
