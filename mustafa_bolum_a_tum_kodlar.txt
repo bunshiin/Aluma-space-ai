@@ -1,0 +1,2699 @@
+================================================================================
+ALUMA — BÖLÜM A (MUSTAFA): GEMINI YÖNLENDİRİCİ VE SERVİS KATMANI (TÜM DOSYALAR)
+================================================================================
+
+// ============================================================================
+// DOSYA: src/services/geminiConstants.js
+// ============================================================================
+// İzin verilen sahne şablonları ve UI aksiyon sabitleri (AGENTS.md Bölüm 4 Sözleşmesi)
+
+export const VALID_TEMPLATE_IDS = Object.freeze([
+  "LIGHT_DELAY",
+  "GRAVITY_SIM",
+  "NEO_SWARM",
+  "SOLAR_FLARE",
+  "APOLLO_11",
+  "NONE",
+]);
+
+export const VALID_ACTION_TYPES = Object.freeze([
+  "OPEN_POPUP",
+  "SPLIT_SCREEN",
+  "OPEN_SIDE_PANEL",
+  "CLOSE_PANEL",
+  "EXPAND_HUD",
+  "MINIMIZE_HUD",
+  "FOCUS_OBJECT",
+  "PAN_TO",
+  "RESET_VIEW",
+  "HIGHLIGHT_OBJECT",
+  "SHOW_COMPARISON",
+  "SHOW_TIMELINE",
+  "SHOW_FACT_CARD",
+  "PLAY_ANIMATION",
+  "PAUSE_ANIMATION",
+  "SIMPLIFY_TEXT",
+  "ADD_TO_HOMEWORK",
+  "SHOW_HOMEWORK_BASKET",
+  "EXPORT_PDF",
+]);
+
+export const DEFAULT_FALLBACK_SPEECH =
+  "Sinyal işlenirken geçici bir sorun oluştu, ana görünüme dönüldü.";
+
+export function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function isNonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+// ============================================================================
+// DOSYA: src/services/keywordMatch.js
+// ============================================================================
+// Türkçe niyet anahtar kelimesi eşleştirme (saf). Niyet algılayıcı ve NASA fotoğraf kuralları ortak kullanır.
+
+// Anahtar kelime kelime başında aranır (Türkçe ekler sonda kalır): "afet" → "afetler" eşleşir,
+// "kıyafet" eşleşmez. Metin içinde parça araması "astronot kıyafetleri"ni doğal afet sanıyordu.
+const WORD_START_CHARS = "a-zçğıöşü0-9";
+export function hasKeyword(text, keyword) {
+  const escaped = String(keyword).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^${WORD_START_CHARS}])${escaped}`, "i").test(String(text || ""));
+}
+
+// ============================================================================
+// DOSYA: src/services/speechTextCleaner.js
+// ============================================================================
+// Seslendirilecek ve ekranda okunacak konuşma metnini temizler (Mustafa'nın ElevenLabs okunuş kurallarıyla).
+// Kural: metinde kesinlikle link, resim/model dosyası adı veya "[... Linki: ...]" etiketi kalmaz.
+// Saf fonksiyonlar; hem sunucu (TTS) hem yönlendirici (speech_text) kullanır.
+
+const TURKISH_MONTHS = [
+  "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+  "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık",
+];
+
+const MEDIA_FILE_RE = /\b[\w~./-]+\.(?:jpe?g|png|gif|webp|svg|tiff?|bmp|glb|gltf|mp4|mov|webm|mp3|wav|pdf)\b/gi;
+const URL_RE = /\b(?:https?:\/\/|www\.)\S+/gi;
+const DOMAIN_RE = /\b[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|gov|edu|io)(?:\/\S*)?/gi;
+const LINK_LABEL_RE = /\[[^\]]*(?:link|bağlant|görsel|fotoğraf|http|www\.)[^\]]*\]/gi;
+const NASA_ASSET_ID_RE = /\b(?:PIA\d{4,6}|[A-Z]{2,}[-_]\d{4,}[\w-]*)\b/g;
+
+/**
+ * Link, dosya adı ve NASA arşiv kimliği gibi okunamayan parçaları siler; düz metin döner.
+ */
+export function removeLinksAndFiles(rawText) {
+  if (typeof rawText !== "string") return "";
+  return rawText
+    .replace(LINK_LABEL_RE, " ")
+    .replace(URL_RE, " ")
+    .replace(DOMAIN_RE, " ")
+    .replace(MEDIA_FILE_RE, " ")
+    .replace(NASA_ASSET_ID_RE, " ")
+    .replace(/\(\s*\)|\[\s*\]/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function convertIsoDatesToTurkish(text) {
+  return text.replace(
+    /\b(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z?)?\b/g,
+    (_, year, month, day) => `${parseInt(day, 10)} ${TURKISH_MONTHS[Math.max(0, Math.min(11, parseInt(month, 10) - 1))]} ${year}`
+  );
+}
+
+/**
+ * ElevenLabs'a gidecek metin: link/dosya temizliği + Türkçe okunuş (tarih, ondalık, birim, özel isim).
+ */
+export function cleanSpeechTextForTts(rawSpeechText) {
+  let text = removeLinksAndFiles(rawSpeechText).replace(/\*\*|__|[*`#]/g, "");
+  text = convertIsoDatesToTurkish(text);
+// Ondalık sayılar Türkçe okunur: "1.28" → "1 virgül 28"
+  text = text.replace(/(\d+)\.(\d+)/g, "$1 virgül $2");
+  return text
+    .replace(/\bkm\/sa\b|\bkm\/h\b/gi, "kilometre bölü saat")
+    .replace(/\bkm\/s\b/gi, "kilometre bölü saniye")
+    .replace(/\bm\/s(?:²|2|\^2)/gi, "metre bölü saniye kare")
+    .replace(/\bkm\b/gi, "kilometre")
+    .replace(/\bsn\b/gi, "saniye")
+    .replace(/°\s*C\b/g, " santigrat derece")
+    .replace(/°/g, " derece ")
+    .replace(/\bJWST\b/g, "Ceyms Veb Uzay Teleskobu")
+    .replace(/\bHubble\b/gi, "Habıl")
+    .replace(/\bPerseverance\b/gi, "Pörsiviyrıns")
+    .replace(/\bCuriosity\b/gi, "Küriyositi")
+    .replace(/\bVoyager\b/gi, "Voyacır")
+    .replace(/\bCassini\b/gi, "Kassini")
+    .replace(/\bJuno\b/gi, "Cuno")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const ONES_TR = ["", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz"];
+const TENS_TR = ["", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan"];
+
+const WORD_TO_NUM_TR = Object.freeze({
+  sıfır: 0, sifir: 0, bir: 1, iki: 2, üç: 3, uc: 3, dört: 4, dort: 4,
+  beş: 5, bes: 5, altı: 6, alti: 6, yedi: 7, sekiz: 8, dokuz: 9,
+  on: 10, yirmi: 20, otuz: 30, kırk: 40, kirk: 40, elli: 50,
+  altmış: 60, altmis: 60, yetmiş: 70, yetmis: 70, seksen: 80, doksan: 90,
+  yüz: 100, yuz: 100, bin: 1000, milyon: 1_000_000, milyar: 1_000_000_000,
+});
+
+function threeDigitsToTurkish(n) {
+  const parts = [];
+  const h = Math.floor(n / 100);
+  const rem = n % 100;
+  const t = Math.floor(rem / 10);
+  const o = rem % 10;
+  if (h > 0) parts.push(h === 1 ? "yüz" : `${ONES_TR[h]} yüz`);
+  if (t > 0) parts.push(TENS_TR[t]);
+  if (o > 0) parts.push(ONES_TR[o]);
+  return parts.join(" ");
+}
+
+export function numberToTurkishWords(num) {
+  const n = Math.trunc(Number(num));
+  if (!Number.isFinite(n) || n < 0) return String(num);
+  if (n === 0) return "sıfır";
+
+  const scales = [
+    { value: 1_000_000_000, label: "milyar" },
+    { value: 1_000_000, label: "milyon" },
+    { value: 1000, label: "bin" },
+    { value: 1, label: "" },
+  ];
+  let remaining = n;
+  const parts = [];
+  for (const { value, label } of scales) {
+    if (remaining >= value) {
+      const chunk = Math.floor(remaining / value);
+      remaining %= value;
+      if (value === 1000 && chunk === 1) {
+        parts.push("bin");
+      } else {
+        const words = threeDigitsToTurkish(chunk);
+        parts.push(label ? `${words} ${label}` : words);
+      }
+    }
+  }
+  return parts.join(" ").trim();
+}
+
+function parseTurkishNumberTokens(tokens) {
+  if (!Array.isArray(tokens) || tokens.length === 0) return null;
+  let total = 0;
+  let current = 0;
+  for (const raw of tokens) {
+    const key = raw.toLocaleLowerCase("tr-TR");
+    const val = WORD_TO_NUM_TR[key];
+    if (val === undefined) return null;
+    if (val === 100) {
+      current = (current === 0 ? 1 : current) * 100;
+    } else if (val >= 1000) {
+      total += (current === 0 ? 1 : current) * val;
+      current = 0;
+    } else {
+      current += val;
+    }
+  }
+  return total + current;
+}
+
+const NUM_WORD_PATTERN = "(?:sıfır|sifir|bir|iki|üç|uc|dört|dort|beş|bes|altı|alti|yedi|sekiz|dokuz|on|yirmi|otuz|kırk|kirk|elli|altmış|altmis|yetmiş|yetmis|seksen|doksan|yüz|yuz|bin|milyon|milyar)";
+const TIME_SUFFIX_PATTERN = "(?:te|ta|de|da|ten|tan|den|dan)";
+const TR_WORD_START = "(?<![a-zA-ZçğıöşüÇĞİÖŞÜ0-9])";
+const TR_WORD_END = "(?![a-zA-ZçğıöşüÇĞİÖŞÜ0-9])";
+
+function convertSpokenTimeAfterSaat(text) {
+  const re = new RegExp(`${TR_WORD_START}(saat)\\s+((?:${NUM_WORD_PATTERN}\\s+){0,4}${NUM_WORD_PATTERN})(${TIME_SUFFIX_PATTERN})?${TR_WORD_END}`, "gi");
+  return text.replace(re, (full, saatWord, rawWords, suffix = "") => {
+    const tokens = rawWords.trim().split(/\s+/).map((w) => w.toLocaleLowerCase("tr-TR"));
+    let hour = null;
+    let minTokens = [];
+    if ((tokens[0] === "sıfır" || tokens[0] === "sifir") && tokens.length >= 2 && WORD_TO_NUM_TR[tokens[1]] <= 9) {
+      hour = WORD_TO_NUM_TR[tokens[1]];
+      minTokens = tokens.slice(2);
+    } else if ((tokens[0] === "on" || tokens[0] === "yirmi") && tokens.length >= 2) {
+      if (WORD_TO_NUM_TR[tokens[1]] >= 1 && WORD_TO_NUM_TR[tokens[1]] <= 9 && tokens.length >= 3) {
+        hour = WORD_TO_NUM_TR[tokens[0]] + WORD_TO_NUM_TR[tokens[1]];
+        minTokens = tokens.slice(2);
+      } else {
+        hour = WORD_TO_NUM_TR[tokens[0]];
+        minTokens = tokens.slice(1);
+      }
+    } else if (WORD_TO_NUM_TR[tokens[0]] >= 0 && WORD_TO_NUM_TR[tokens[0]] <= 9 && tokens.length >= 2) {
+      hour = WORD_TO_NUM_TR[tokens[0]];
+      minTokens = tokens.slice(1);
+    }
+    if (hour === null || hour > 23) return full;
+
+    let minute = 0;
+    if (minTokens.length > 0) {
+      if ((minTokens[0] === "sıfır" || minTokens[0] === "sifir") && minTokens.length === 2 && WORD_TO_NUM_TR[minTokens[1]] <= 9) {
+        minute = WORD_TO_NUM_TR[minTokens[1]];
+      } else {
+        const parsedMin = parseTurkishNumberTokens(minTokens);
+        if (parsedMin === null || parsedMin > 59) return full;
+        minute = parsedMin;
+      }
+    }
+    const hh = String(hour).padStart(2, "0");
+    const mm = String(minute).padStart(2, "0");
+    return `${saatWord} ${hh}:${mm}${suffix ? `'${suffix.toLocaleLowerCase("tr-TR")}` : ""}`;
+  });
+}
+
+/**
+ * Kullanıcının ekranda göreceği metin (speech_text):
+ * Yazıyla yazılmış sayı, saat ve ondalıkları rakamlara çevirir ("On beş Kasım iki bin yirmi altı" → "15 Kasım 2026", "dört nokta dört" → "4.4").
+ */
+export function formatDisplaySpeechText(rawText) {
+  let text = removeLinksAndFiles(rawText);
+  if (!text) return "";
+
+  // ISO tarih + saat varsa okunur rakamlı formata çevir
+  text = text.replace(
+    /\b(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z?\b/g,
+    (_, y, m, d, hm) => `${parseInt(d, 10)} ${TURKISH_MONTHS[Math.max(0, Math.min(11, parseInt(m, 10) - 1))]} ${y} saat ${hm}`
+  );
+  text = convertIsoDatesToTurkish(text);
+  text = convertSpokenTimeAfterSaat(text);
+
+  // Ondalık sayı okunuşları: "dört nokta dört" / "on iki virgül beş" → "4.4" / "12.5"
+  const decRe = new RegExp(`${TR_WORD_START}((?:${NUM_WORD_PATTERN}\\s+)*${NUM_WORD_PATTERN})\\s+(?:nokta|virgül|virgul)\\s+((?:${NUM_WORD_PATTERN}\\s+)*${NUM_WORD_PATTERN})${TR_WORD_END}`, "gi");
+  text = text.replace(decRe, (full, leftStr, rightStr) => {
+    const leftVal = parseTurkishNumberTokens(leftStr.trim().split(/\s+/));
+    const rightTokens = rightStr.trim().split(/\s+/);
+    if (leftVal === null) return full;
+    if ((rightTokens[0]?.toLocaleLowerCase("tr-TR") === "sıfır" || rightTokens[0]?.toLocaleLowerCase("tr-TR") === "sifir") && rightTokens.length === 2) {
+      const unit = parseTurkishNumberTokens([rightTokens[1]]);
+      if (unit !== null) return `${leftVal}.0${unit}`;
+    }
+    const rightVal = parseTurkishNumberTokens(rightTokens);
+    if (rightVal === null) return full;
+    return `${leftVal}.${rightVal}`;
+  });
+
+  // Tam sayı okunuşları: tek başına "bir" belgisiz sıfat olduğu için ("bir deprem") korunur
+  const intRe = new RegExp(`${TR_WORD_START}((?:${NUM_WORD_PATTERN}\\s+)*${NUM_WORD_PATTERN})${TR_WORD_END}`, "gi");
+  text = text.replace(intRe, (full) => {
+    const tokens = full.trim().split(/\s+/);
+    if (tokens.length === 1 && tokens[0].toLocaleLowerCase("tr-TR") === "bir") return full;
+    const val = parseTurkishNumberTokens(tokens);
+    return val !== null ? String(val) : full;
+  });
+
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function capitalizeSentenceStarts(text) {
+  return text.replace(/(^\s*|[.!?]\s+)([a-zçğıöşü])/g, (_, prefix, ch) => prefix + ch.toLocaleUpperCase("tr-TR"));
+}
+
+/**
+ * Ses API'sine (ElevenLabs TTS) gönderilecek metin (tts_text):
+ * Rakamları, saatleri, tarihleri, ondalıkları ve birimleri tamamen Türkçe okunuşuna (yazıya) çevirir.
+ */
+export function formatTtsSpeechText(rawTtsText, fallbackDisplayText = "") {
+  const source = typeof rawTtsText === "string" && rawTtsText.trim() ? rawTtsText : fallbackDisplayText;
+  let text = removeLinksAndFiles(source).replace(/\*\*|__|[*`#]/g, "");
+  if (!text) return "";
+
+  // ISO tarih + saat ("2026-11-15T09:24:00Z") → "15 Kasım 2026 tarihinde, saat 09:24"
+  text = text.replace(
+    /\b(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?Z?\b/g,
+    (_, y, m, d, hm) => `${parseInt(d, 10)} ${TURKISH_MONTHS[Math.max(0, Math.min(11, parseInt(m, 10) - 1))]} ${y} saat ${hm}`
+  );
+  text = convertIsoDatesToTurkish(text);
+
+  // Saat ifadeleri: "09:24'te" / "09:24" → "sıfır dokuz yirmi dörtte"
+  text = text.replace(/\b(\d{1,2}):(\d{2})(?:'([a-zA-ZçğıöşüÇĞİÖŞÜ]+))?\b/g, (_, hStr, mStr, suffix = "") => {
+    const h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10);
+    const hWords = hStr.startsWith("0") && h > 0 && h < 10 ? `sıfır ${numberToTurkishWords(h)}` : numberToTurkishWords(h);
+    let mWords = "";
+    if (m > 0) {
+      mWords = mStr.startsWith("0") && m < 10 ? `sıfır ${numberToTurkishWords(m)}` : numberToTurkishWords(m);
+    }
+    const combined = mWords ? `${hWords} ${mWords}` : hWords;
+    return suffix ? `${combined}${suffix.toLocaleLowerCase("tr-TR")}` : combined;
+  });
+
+  // Ondalık sayılar: "4.4" veya "4,4" → "dört nokta dört"
+  text = text.replace(/(\d+)[.,](\d+)/g, (_, intPart, fracPart) => {
+    const left = numberToTurkishWords(parseInt(intPart, 10));
+    const right = fracPart.startsWith("0") && fracPart.length > 1
+      ? fracPart.split("").map((d) => numberToTurkishWords(parseInt(d, 10))).join(" ")
+      : numberToTurkishWords(parseInt(fracPart, 10));
+    return `${left} nokta ${right}`;
+  });
+
+  // Tam sayılar ve kesme işaretli ekleri: "15" → "on beş", "2026'da" → "iki bin yirmi altıda"
+  text = text.replace(/\b(\d+)(?:'([a-zA-ZçğıöşüÇĞİÖŞÜ]+))?\b/g, (_, numStr, suffix = "") => {
+    const words = numberToTurkishWords(parseInt(numStr, 10));
+    return suffix ? `${words}${suffix.toLocaleLowerCase("tr-TR")}` : words;
+  });
+
+  text = text
+    .replace(/\bkm\/sa\b|\bkm\/h\b/gi, "kilometre bölü saat")
+    .replace(/\bkm\/s\b/gi, "kilometre bölü saniye")
+    .replace(/\bm\/s(?:²|2|\^2)/gi, "metre bölü saniye kare")
+    .replace(/\bkm\b/gi, "kilometre")
+    .replace(/\bsn\b/gi, "saniye")
+    .replace(/\bMw\b/g, "")
+    .replace(/°\s*C\b/g, " santigrat derece")
+    .replace(/°/g, " derece ")
+    .replace(/\bJWST\b/g, "Ceyms Veb Uzay Teleskobu")
+    .replace(/\bHubble\b/gi, "Habıl")
+    .replace(/\bPerseverance\b/gi, "Pörsiviyrıns")
+    .replace(/\bCuriosity\b/gi, "Küriyositi")
+    .replace(/\bVoyager\b/gi, "Voyacır")
+    .replace(/\bCassini\b/gi, "Kassini")
+    .replace(/\bJuno\b/gi, "Cuno")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return capitalizeSentenceStarts(text);
+}
+
+// ============================================================================
+// DOSYA: src/services/elevenLabsTts.js
+// ============================================================================
+// ElevenLabs seslendirmesi (Mustafa'nın modülünden): sunucuda çalışır, anahtar .env'den okunur ve tarayıcıya gitmez.
+// Tarayıcı POST /api/tts ile metni gönderir, MP3 sesi geri alır.
+
+import { cleanSpeechTextForTts } from "./speechTextCleaner.js";
+
+const FREE_TIER_FEMALE_VOICES = [
+  "Xb7hH8MSUJpSbSDYk0k2", // Alice: net eğitim/bilim anlatıcısı
+  "EXAVITQu4vr4xnSDxMaL", // Sarah
+  "XrExE9yKIg1WjnnlVkGX", // Matilda
+  "cgSgspJ2msm6clMCkdW9", // Jessica
+  "FGY2WhTYpPnrIDTdsKH5", // Laura
+];
+const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
+const REQUEST_TIMEOUT_MS = 15000;
+const MAX_TTS_CHARS = 600;
+const AUDIO_CACHE_LIMIT = 40;
+// Kota bitince her cümlede boşuna istek atılmasın; bu süre boyunca ElevenLabs'e hiç gidilmez
+const QUOTA_RETRY_MS = 10 * 60 * 1000;
+export const TTS_FAILURE = Object.freeze({ QUOTA: "quota_exceeded", UNAUTHORIZED: "unauthorized", NETWORK: "network", REJECTED: "rejected" });
+
+let lastFailure = null;
+let quotaBlockedUntil_ms = 0;
+
+// Aynı cümleyi tekrar seslendirmek kotayı harcamasın diye son sesler bellekte tutulur
+const audioCache = new Map();
+
+const PLACEHOLDER_KEY = "your_elevenlabs_api_key";
+
+// ELEVENLABS_API_KEYS (virgüllü liste) öncelikli; eski tek anahtar ELEVENLABS_API_KEY da listeye eklenir
+function readApiKeys(env) {
+  const candidates = [...String(env.ELEVENLABS_API_KEYS || "").split(","), String(env.ELEVENLABS_API_KEY || "")];
+  const keys = candidates.map((k) => k.trim()).filter((k) => k && k !== PLACEHOLDER_KEY);
+  return [...new Set(keys)];
+}
+
+function readTtsConfig(env) {
+  return {
+    apiKeys: readApiKeys(env),
+    voiceId: String(env.ELEVENLABS_VOICE_ID || FREE_TIER_FEMALE_VOICES[0]).trim(),
+    modelId: String(env.ELEVENLABS_MODEL_ID || DEFAULT_MODEL_ID).trim(),
+  };
+}
+
+/**
+ * Son seslendirme isteğinin neden başarısız olduğu (TTS_FAILURE değerlerinden biri) ya da null.
+ */
+export function getElevenLabsFailure() {
+  return lastFailure;
+}
+
+// ElevenLabs kota dolunca da 401 döner; asıl neden gövdedeki "code" alanındadır
+async function readFailureReason(res) {
+  const body = typeof res.json === "function" ? await res.json().catch(() => null) : null;
+  const code = String(body?.detail?.code || body?.detail?.status || "");
+  if (code === "quota_exceeded") return TTS_FAILURE.QUOTA;
+  return res.status === 401 ? TTS_FAILURE.UNAUTHORIZED : TTS_FAILURE.REJECTED;
+}
+
+export function isElevenLabsConfigured(env = process.env) {
+  return readApiKeys(env).length > 0;
+}
+
+function requestTtsAudio(fetchFn, apiKey, voiceId, modelId, text) {
+  const payload = { text, model_id: modelId, voice_settings: { stability: 0.55, similarity_boost: 0.8 } };
+  if (modelId.includes("v2_5")) payload.language_code = "tr";
+  return fetchFn(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    method: "POST",
+    headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+}
+
+function rememberAudio(key, buffer) {
+  audioCache.set(key, buffer);
+  if (audioCache.size > AUDIO_CACHE_LIMIT) audioCache.delete(audioCache.keys().next().value);
+}
+
+// Tek bir anahtarla sesleri dener. Kota/yetki hatasında { nextKey: true } döner, böylece sıradaki anahtar denenir.
+async function synthesizeWithKey(fetchFn, apiKey, voices, modelId, text) {
+  for (const candidate of voices) {
+    const res = await requestTtsAudio(fetchFn, apiKey, candidate, modelId, text);
+    if (res.ok) return { buffer: Buffer.from(await res.arrayBuffer()) };
+    const reason = await readFailureReason(res);
+    if (reason === TTS_FAILURE.QUOTA || reason === TTS_FAILURE.UNAUTHORIZED) return { reason, nextKey: true };
+    if (![400, 402, 404].includes(res.status)) {
+      console.warn(`[ElevenLabs TTS] Ses üretilemedi (HTTP ${res.status}, ${reason}).`);
+      return { reason, nextKey: false };
+    }
+  }
+  return { reason: TTS_FAILURE.REJECTED, nextKey: false };
+}
+
+/**
+ * Metni temizleyip ElevenLabs'tan MP3 üretir. Başarısızlıkta null döner, hata fırlatmaz.
+ * Anahtar kotaya/yetkiye takılırsa sıradaki anahtara geçilir; ses kotaya/izne takılırsa (400/402/404) sıradaki ücretsiz sese geçilir.
+ */
+export async function createElevenLabsAudio(rawText, { env = process.env, fetchFn = globalThis.fetch } = {}) {
+  const { apiKeys, voiceId, modelId } = readTtsConfig(env);
+  const text = cleanSpeechTextForTts(rawText).slice(0, MAX_TTS_CHARS);
+  if (apiKeys.length === 0 || !text || typeof fetchFn !== "function") return null;
+
+  const cacheKey = `${voiceId}|${modelId}|${text}`;
+  if (audioCache.has(cacheKey)) {
+    lastFailure = null;
+    return audioCache.get(cacheKey);
+  }
+  if (Date.now() < quotaBlockedUntil_ms) {
+    lastFailure = TTS_FAILURE.QUOTA;
+    return null;
+  }
+
+  const voices = [voiceId, ...FREE_TIER_FEMALE_VOICES.filter((v) => v !== voiceId)];
+  try {
+    let lastReason = TTS_FAILURE.REJECTED;
+    for (const apiKey of apiKeys) {
+      const outcome = await synthesizeWithKey(fetchFn, apiKey, voices, modelId, text);
+      if (outcome.buffer) {
+        rememberAudio(cacheKey, outcome.buffer);
+        lastFailure = null;
+        return outcome.buffer;
+      }
+      lastReason = outcome.reason;
+      if (!outcome.nextKey) break;
+    }
+    lastFailure = lastReason;
+    if (lastReason === TTS_FAILURE.QUOTA) {
+      // Tüm anahtarlar kotada; tek net uyarı yazılır ve bir süre denenmez
+      quotaBlockedUntil_ms = Date.now() + QUOTA_RETRY_MS;
+      console.warn("[ElevenLabs TTS] Kredi kotası doldu: seslendirme kapalı. Yeni anahtar/plan gerekir ya da kota yenilenmesi beklenir.");
+    } else {
+      console.warn("[ElevenLabs TTS] Hiçbir ses/anahtar kullanılamadı (kota veya izin).");
+    }
+  } catch (err) {
+    lastFailure = TTS_FAILURE.NETWORK;
+    console.warn("[ElevenLabs TTS] Bağlantı hatası:", err?.message);
+  }
+  return null;
+}
+
+export function clearElevenLabsCache() {
+  audioCache.clear();
+  lastFailure = null;
+  quotaBlockedUntil_ms = 0;
+}
+
+// ============================================================================
+// DOSYA: src/services/geminiHistory.js
+// ============================================================================
+// Konuşma geçmişini bellek ve yerel JSON dosyasında yönetir
+
+import fs from "node:fs";
+import path from "node:path";
+
+const HISTORY_FILE_NAME = ".gemini_history.json";
+let inMemoryHistory = [];
+
+function getHistoryFilePath() {
+  return path.resolve(HISTORY_FILE_NAME);
+}
+
+function loadHistoryFromStorage() {
+  const filePath = getHistoryFilePath();
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, "utf8");
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.warn("Konuşma geçmişi okunamadı, bellek içi geçmiş kullanılıyor:", err.message);
+  }
+  return inMemoryHistory;
+}
+
+function persistHistory(history) {
+  inMemoryHistory = history;
+  try {
+    fs.writeFileSync(getHistoryFilePath(), JSON.stringify(history, null, 2), "utf8");
+  } catch (err) {
+    console.warn("Konuşma geçmişi diske yazılamadı:", err.message);
+  }
+}
+
+export function clearConversationHistory() {
+  inMemoryHistory = [];
+  const filePath = getHistoryFilePath();
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (err) {
+    console.warn("Konuşma geçmişi dosyası silinemedi:", err.message);
+  }
+}
+
+export function getConversationHistory() {
+  return loadHistoryFromStorage();
+}
+
+export function buildConversationContents(promptText, isStudentMode) {
+  const maxTurns = isStudentMode ? 10 : 5;
+  const maxItems = maxTurns * 2;
+  const history = loadHistoryFromStorage().slice(-maxItems);
+
+  const contents = [];
+  for (const item of history) {
+    if (item.role === "user") {
+      contents.push({ role: "user", parts: [{ text: item.text }] });
+    } else if (item.role === "model") {
+      contents.push({ role: "model", parts: [{ text: item.text }] });
+    }
+  }
+  contents.push({ role: "user", parts: [{ text: promptText }] });
+  return contents;
+}
+
+export function recordTurnInHistory(promptText, replyText) {
+  const history = loadHistoryFromStorage();
+  history.push({ role: "user", text: promptText });
+  history.push({ role: "model", text: replyText });
+  persistHistory(history);
+}
+
+// ============================================================================
+// DOSYA: src/services/geminiClient.js
+// ============================================================================
+// Gemini API istemcisi, anahtar rotasyonu ve yeniden deneme (failover) yönetimi
+
+import { isNonEmptyString, isPlainObject } from "./geminiConstants.js";
+
+function createKeyArrayFromString(rawKeys) {
+  if (!isNonEmptyString(rawKeys)) return [];
+  return rawKeys.split(",").map((k) => k.trim()).filter(isNonEmptyString);
+}
+
+function resolveEnvironmentApiKeys() {
+  const fromList = createKeyArrayFromString(process.env.GEMINI_API_KEYS);
+  if (fromList.length > 0) return fromList;
+  return createKeyArrayFromString(process.env.GEMINI_API_KEY);
+}
+
+const moduleConfig = {
+  apiKeys: [],
+  activeKeyIndex: 0,
+  client: null,
+  clientFactory: null,
+  modelName: "gemini-3.5-flash-lite",
+  retryDelayMs: 3000,
+  maxRetryRounds: 2,
+  requestTimeoutMs: 20000,
+  silentTelemetry: false,
+};
+
+export function createGeminiRouterConfig(options = {}) {
+  if (!isPlainObject(options)) return;
+  if (Array.isArray(options.apiKeys)) {
+    moduleConfig.apiKeys = options.apiKeys.filter(isNonEmptyString).map((k) => k.trim());
+    moduleConfig.activeKeyIndex = 0;
+  } else if (typeof options.apiKey === "string") {
+    moduleConfig.apiKeys = createKeyArrayFromString(options.apiKey);
+    moduleConfig.activeKeyIndex = 0;
+  }
+  if (options.client !== undefined) moduleConfig.client = options.client;
+  if (options.clientFactory !== undefined) moduleConfig.clientFactory = options.clientFactory;
+  if (isNonEmptyString(options.modelName)) moduleConfig.modelName = options.modelName.trim();
+  if (typeof options.retryDelayMs === "number" && options.retryDelayMs >= 0) {
+    moduleConfig.retryDelayMs = options.retryDelayMs;
+  }
+  if (typeof options.maxRetryRounds === "number" && options.maxRetryRounds >= 1) {
+    moduleConfig.maxRetryRounds = options.maxRetryRounds;
+  }
+  if (typeof options.requestTimeoutMs === "number" && options.requestTimeoutMs > 0) {
+    moduleConfig.requestTimeoutMs = options.requestTimeoutMs;
+  }
+  if (typeof options.silentTelemetry === "boolean") {
+    moduleConfig.silentTelemetry = options.silentTelemetry;
+  }
+}
+
+export function getGeminiRouterRuntimeInfo() {
+  return {
+    modelName: moduleConfig.modelName,
+    hasCustomClient: Boolean(moduleConfig.client || moduleConfig.clientFactory),
+    silentTelemetry: Boolean(moduleConfig.silentTelemetry),
+  };
+}
+
+function ensureApiKeysLoaded() {
+  if (moduleConfig.client) return;
+  if (moduleConfig.apiKeys.length === 0) {
+    const envKeys = resolveEnvironmentApiKeys();
+    if (envKeys.length > 0) moduleConfig.apiKeys = envKeys;
+  }
+}
+
+function getNextClientInfo() {
+  if (moduleConfig.client) {
+    return { client: moduleConfig.client, keyIndex: -1, rawKey: null };
+  }
+  ensureApiKeysLoaded();
+  if (moduleConfig.apiKeys.length === 0) {
+    throw new Error("Hiçbir Gemini API anahtarı tanımlı değil.");
+  }
+
+  const currentIndex = moduleConfig.activeKeyIndex % moduleConfig.apiKeys.length;
+  const selectedKey = moduleConfig.apiKeys[currentIndex];
+  const client = moduleConfig.clientFactory ? moduleConfig.clientFactory(selectedKey) : null;
+  return { client, keyIndex: currentIndex, rawKey: selectedKey };
+}
+
+function rotateApiKey() {
+  if (moduleConfig.apiKeys.length > 1) {
+    moduleConfig.activeKeyIndex = (moduleConfig.activeKeyIndex + 1) % moduleConfig.apiKeys.length;
+  }
+}
+
+async function callV1BetaDirect(rawKey, modelName, contents, systemInstructionText, timeoutMs) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${rawKey}`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemInstructionText }] },
+      contents,
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.3,
+        maxOutputTokens: 4096,
+      },
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const data = await resp.json();
+  if (!resp.ok || !data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    throw new Error(data.error?.message || `HTTP ${resp.status}`);
+  }
+  return data.candidates[0].content.parts[0].text;
+}
+
+export async function requestGeminiWithFailover(contents, sysPrompt) {
+  ensureApiKeysLoaded();
+  let attempts = 0;
+  const maxAttempts = Math.max(1, moduleConfig.apiKeys.length) * moduleConfig.maxRetryRounds;
+
+  while (attempts < maxAttempts) {
+    attempts += 1;
+    const clientInfo = getNextClientInfo();
+
+    try {
+      if (clientInfo.client) {
+        const response = await clientInfo.client.models.generateContent({
+          model: moduleConfig.modelName,
+          contents,
+          config: {
+            systemInstruction: sysPrompt,
+            responseMimeType: "application/json",
+          },
+        });
+        const responseText = response?.text;
+        if (!isNonEmptyString(responseText)) {
+          throw new Error("Gemini API boş yanıt döndürdü.");
+        }
+        return { text: responseText, keyIndex: clientInfo.keyIndex };
+      }
+
+      const directText = await callV1BetaDirect(
+        clientInfo.rawKey,
+        moduleConfig.modelName,
+        contents,
+        sysPrompt,
+        moduleConfig.requestTimeoutMs
+      );
+      return { text: directText, keyIndex: clientInfo.keyIndex };
+    } catch (error) {
+      if (moduleConfig.client) throw error;
+      const detail = error.cause?.message ? `${error.message} (${error.cause.message})` : error.message;
+      console.warn(`Gemini isteği başarısız (deneme ${attempts}/${maxAttempts}):`, detail);
+      rotateApiKey();
+      if (attempts % Math.max(1, moduleConfig.apiKeys.length) === 0 && attempts < maxAttempts) {
+        await new Promise((r) => setTimeout(r, moduleConfig.retryDelayMs));
+      }
+    }
+  }
+  throw new Error("Tüm API anahtarları tükendi.");
+}
+
+// ============================================================================
+// DOSYA: src/services/geminiTelemetry.js
+// ============================================================================
+// Sunucu konsoluna yönlendirme kararının okunur özetini yazar (geliştirici telemetrisi)
+
+export function logRouteTelemetry({ promptText, detectedCategory, keyIndex, routeResult, modelName, silent }) {
+  if (silent) return;
+  console.log("┌──────────────────────────────────────────────────────────────────────────┐");
+  console.log("│                     ALUMA YÖNLENDİRİCİ TELEMETRİ LOGU                    │");
+  console.log("├──────────────────────────────────────────────────────────────────────────┤");
+  console.log("│ [1] DEĞİŞKENLER (VARIABLES):                                             │");
+  console.log(`│   • Kullanıcı Sorusu  : ${promptText}`);
+  console.log(`│   • Algılanan Niyet   : ${detectedCategory ? "CANLI_API_SORGUSU (" + detectedCategory.categoryName + ")" : "GENEL_BILIMSEL_SORGU (API Çağrılmadı)"}`);
+  console.log(`│   • Taha API Fonksiyon: ${detectedCategory ? `getSpaceData('${detectedCategory.queryType}', '${detectedCategory.identifier}')` : "YOK (Doğrudan Gemini)"}`);
+  console.log(`│   • Öğrenci Modu      : ${routeResult.is_student_mode} (Hafıza Limiti: ${routeResult.is_student_mode ? 10 : 5} mesaj)`);
+  console.log(`│   • Aktif Model & Key : ${modelName} (Anahtar #${keyIndex >= 0 ? keyIndex + 1 : "MOCK"})`);
+  console.log("├──────────────────────────────────────────────────────────────────────────┤");
+  console.log("│ [2] SAHNE VE AKSİYON (SCENE & ACTION):                                   │");
+  console.log(`│   • Sahne Şablonu     : ${routeResult.template_id}`);
+  console.log(`│   • Aksiyon Tipi      : ${routeResult.action_type}`);
+  console.log("├──────────────────────────────────────────────────────────────────────────┤");
+  console.log("│ [3] PARAMETRELER (PARAMETERS):                                           │");
+  for (const [k, v] of Object.entries(routeResult.parameters || {})) {
+    const formattedVal = typeof v === "object" ? JSON.stringify(v) : v;
+    console.log(`│   • ${k.padEnd(18)}: ${formattedVal}`);
+  }
+  console.log("├──────────────────────────────────────────────────────────────────────────┤");
+  console.log("│ [4A] KULLANICI METNİ (SPEECH_TEXT - EKRAN):                              │");
+  console.log(`│   "${routeResult.speech_text}"`);
+  if (routeResult.tts_text) {
+    console.log("├──────────────────────────────────────────────────────────────────────────┤");
+    console.log("│ [4B] SES API METNİ (TTS_TEXT - SESLENDİRME):                             │");
+    console.log(`│   "${routeResult.tts_text}"`);
+  }
+  console.log("├──────────────────────────────────────────────────────────────────────────┤");
+  console.log("│ [5] ÇIKTI ŞABLONU (OUTPUT JSON):                                         │");
+  const { speech_text: _omittedSpeech, tts_text: _omittedTts, ...templateWithoutSpeech } = routeResult;
+  const jsonLines = JSON.stringify(templateWithoutSpeech, null, 2).split("\n");
+  for (const line of jsonLines) {
+    console.log(`│   ${line}`);
+  }
+  console.log("└──────────────────────────────────────────────────────────────────────────┘");
+}
+
+// ============================================================================
+// DOSYA: src/services/spaceDataFallback.js
+// ============================================================================
+// dataLayer.js bulunamadığında veya yanıt vermediğinde kullanılan yedek uzay verileri
+
+function createFallbackRegistry() {
+  const todayIso = new Date().toISOString();
+  const todayDate = todayIso.split("T")[0];
+
+  return {
+    missions: {
+      apollo_11: { id: "apollo_11", name: "Apollo 11", target: "Moon", launch_date: "1969-07-16", landing_date: "1969-07-20T20:17:40Z", landing_site: "Mare Tranquillitatis", coordinates: { latitude_deg: 0.67408, longitude_deg: 23.47297 }, crew: ["Neil Armstrong", "Buzz Aldrin", "Michael Collins"], image_url: "https://images-assets.nasa.gov/image/as11-40-5874/as11-40-5874~orig.jpg", description: "İnsanlığın Ay yüzeyine ilk başarılı inişi." },
+      venera_7: { id: "venera_7", name: "Venera 7", target: "Venus", launch_date: "1970-08-17", landing_date: "1970-12-15T05:34:10Z", temperature_c: 475, pressure_atm: 90, description: "Başka bir gezegenin yüzeyinden ilk veri aktaran araç." },
+      perseverance: { id: "perseverance", name: "Perseverance Rover", target: "Mars", launch_date: "2020-07-30", landing_date: "2021-02-18T20:55:00Z", landing_site: "Jezero Krateri", coordinates: { latitude_deg: 18.38, longitude_deg: 77.58 }, image_url: "https://images-assets.nasa.gov/image/PIA26242/PIA26242~orig.jpg", nasa_gallery_url: "https://science.nasa.gov/mission/mars-2020-perseverance/mars-images/", description: "Mars'ta antik yaşam izleri arayan rover." },
+      jwst: { id: "jwst", name: "James Webb Uzay Teleskobu", target: "Sun-Earth L2", launch_date: "2021-12-25", orbit_altitude_km: 1500000, image_url: "https://images-assets.nasa.gov/image/weic2205a/weic2205a~orig.jpg", nasa_gallery_url: "https://science.nasa.gov/mission/webb/multimedia/images/", description: "Kızılötesi astronominin amiral gemisi uzay teleskobu." },
+      hubble: { id: "hubble", name: "Hubble Uzay Teleskobu", target: "Low Earth Orbit", launch_date: "1990-04-24", orbit_altitude_km: 540, image_url: "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001362/GSFC_20171208_Archive_e001362~orig.jpg", nasa_gallery_url: "https://science.nasa.gov/mission/hubble/multimedia/hubble-images/", description: "Derin uzay gözlemleri yapan optik teleskop." },
+    },
+    planets: {
+      mercury: { name: "Mercury", gravity_ms2: 3.7, radius_km: 2439.7, mass_kg: 3.3e23, day_length_hours: 4222.6, mean_temp_c: 167, distance_from_sun_km: 57900000, moons_count: 0 },
+      venus: { name: "Venus", gravity_ms2: 8.87, radius_km: 6051.8, mass_kg: 4.87e24, day_length_hours: 2802.0, mean_temp_c: 464, distance_from_sun_km: 108200000, moons_count: 0 },
+      earth: { name: "Earth", gravity_ms2: 9.81, radius_km: 6371.0, mass_kg: 5.97e24, day_length_hours: 24.0, mean_temp_c: 15, distance_from_sun_km: 149600000, moons_count: 1 },
+      moon: { name: "Moon", gravity_ms2: 1.62, radius_km: 1737.4, mass_kg: 7.3e22, day_length_hours: 708.7, mean_temp_c: -20, distance_from_sun_km: 149600000, moons_count: 0 },
+      mars: { name: "Mars", gravity_ms2: 3.71, radius_km: 3389.5, mass_kg: 6.42e23, day_length_hours: 24.7, mean_temp_c: -63, distance_from_sun_km: 227900000, moons_count: 2 },
+      jupiter: { name: "Jupiter", gravity_ms2: 24.79, radius_km: 69911.0, mass_kg: 1.9e27, day_length_hours: 9.9, mean_temp_c: -108, distance_from_sun_km: 778500000, moons_count: 95 },
+      saturn: { name: "Saturn", gravity_ms2: 10.44, radius_km: 58232.0, mass_kg: 5.68e26, day_length_hours: 10.7, mean_temp_c: -139, distance_from_sun_km: 1433000000, moons_count: 146 },
+    },
+    neo: [
+      { name: "99942 Apophis", close_approach_utc: "2026-11-14T19:40:00Z", distance_km: 31000, velocity_kmh: 107000, is_hazardous: true, hazard_level: "HIGH" },
+      { name: "101955 Bennu", close_approach_utc: "2026-11-14T22:10:00Z", distance_km: 2200000, velocity_kmh: 100800, is_hazardous: true, hazard_level: "MEDIUM" },
+      { name: "2024 BX1", close_approach_utc: "2026-11-14T09:15:00Z", distance_km: 450000, velocity_kmh: 54000, is_hazardous: false, hazard_level: "LOW" },
+    ],
+    solar: {
+      flare_class: "C4.4",
+      radiation_level: "LOW",
+      begin_time: "2026-11-14T06:02:00Z",
+      peak_time: "2026-11-14T06:06:00Z",
+      end_time: "2026-11-14T06:08:00Z",
+      source_region: "Region 4569",
+      coordinates: { latitude_deg: -6, longitude_deg: -104, heliographic_location: "S06W0*", region_number: 4569 },
+    },
+    spacecraft: {
+      voyager_1: { id: "voyager_1", name: "Voyager 1", timestamp_utc: "2026-11-14T15:00:00Z", distance_km: 24450000000, light_time_s: 81500, round_trip_s: 163000, relative_speed_kms: 17.0 },
+      parker: { id: "parker", name: "Parker Solar Probe", timestamp_utc: "2026-11-14T15:00:00Z", distance_km: 6100000, relative_speed_kms: 176.0 },
+    },
+    iss: {
+      name: "Uluslararası Uzay İstasyonu (ISS)",
+      source: "NASA JPL Horizons (Target: -125544)",
+      timestamp_utc: "2026-11-14T15:30:00Z",
+      latitude_deg: 51.64,
+      longitude_deg: -0.12,
+      altitude_km: 418.5,
+      velocity_kmh: 27600,
+    },
+    apod: {
+      title: "Andromeda Gökadası Derin Alan",
+      date: todayDate,
+      date_taken_utc: todayIso,
+      explanation: "2.5 milyon ışık yılı uzaklıktaki komşumuz Andromeda'nın kızılötesi ve optik birleşik yüksek çözünürlüklü görüntüsü.",
+      media_type: "image",
+      image_url: "https://apod.nasa.gov/apod/image/2411/M31_HubbleSpitzer_3000.jpg",
+      hd_image_url: "https://apod.nasa.gov/apod/image/2411/M31_HubbleSpitzer_3000.jpg",
+      nasa_gallery_url: "https://apod.nasa.gov/apod/astropix.html",
+    },
+    mars_weather: {
+      sol: 1415,
+      terrestrial_date_utc: "2026-11-14T13:20:00Z",
+      mission_source: "NASA Perseverance MEDA & InSight Weather Service",
+      location: "Jezero Krateri & Elysium Planitia",
+      coordinates: { latitude_deg: 18.38, longitude_deg: 77.58 },
+      storm_status: "ACTIVE_REGIONAL_DUST_STORM",
+      storm_title: "Jezero Güney Havzası Bölgesel Toz Fırtınası",
+      wind_speed_ms: 28.4,
+      wind_speed_kmh: 102.2,
+      wind_direction: "WNW (Batı-Kuzeybatı)",
+      dust_opacity_tau: 1.85,
+      pressure_pa: 742.6,
+      temperature_c: { min_c: -84.2, max_c: -18.5, avg_c: -56.8 },
+      season: "Kuzey Yarımküre Geç Sonbahar (Ls 248°)",
+    },
+    eonet: [
+      {
+        id: "EONET_7110",
+        title: "Türkiye - Ege Denizi ve Akdeniz Sismik Hareketi (Turkey Earthquake)",
+        category: "earthquakes",
+        category_title: "Earthquakes",
+        timestamp_utc: "2026-11-14T14:45:00Z",
+        first_seen_utc: "2026-11-14T14:45:00Z",
+        status: "OPEN",
+        coordinates: { latitude_deg: 36.85, longitude_deg: 27.42 },
+        magnitude_value: 5.8,
+        magnitude_unit: "Mw",
+        depth_km: 12.5,
+        description: "Merkez üssü: Muğla - Datça ve Rodos açıkları (Türkiye / Ege Denizi) · Büyüklük: 5.8 Mw · Derinlik: 12.5 km · Fay hattı: Helen Yayı sismik kırılması",
+      },
+      {
+        id: "EONET_7111",
+        title: "Doğu Anadolu - Malatya / Kahramanmaraş Depremi (Turkey Earthquake)",
+        category: "earthquakes",
+        category_title: "Earthquakes",
+        timestamp_utc: "2026-11-13T21:18:00Z",
+        first_seen_utc: "2026-11-13T21:18:00Z",
+        status: "OPEN",
+        coordinates: { latitude_deg: 38.22, longitude_deg: 38.15 },
+        magnitude_value: 4.9,
+        magnitude_unit: "Mw",
+        depth_km: 8.4,
+        description: "Merkez üssü: Doğu Anadolu Fay Hattı, Malatya - Kahramanmaraş kuşağı (Türkiye) · Büyüklük: 4.9 Mw · Derinlik: 8.4 km",
+      },
+      {
+        id: "EONET_7112",
+        title: "Honshu Doğu Açıkları Depremi, Japonya (Japan Earthquake)",
+        category: "earthquakes",
+        category_title: "Earthquakes",
+        timestamp_utc: "2026-11-14T05:30:00Z",
+        first_seen_utc: "2026-11-14T05:30:00Z",
+        status: "OPEN",
+        coordinates: { latitude_deg: 38.1, longitude_deg: 142.6 },
+        magnitude_value: 6.4,
+        magnitude_unit: "Mw",
+        depth_km: 32.0,
+        description: "Merkez üssü: Honshu doğu kıyısı açıkları (Japonya) · Büyüklük: 6.4 Mw · Derinlik: 32.0 km · Pasifik dalma-batma zonu",
+      },
+      { id: "EONET_7104", title: "California Wildfire Complex", category: "wildfires", timestamp_utc: "2026-11-14T08:15:00Z", coordinates: { latitude_deg: 34.2, longitude_deg: -118.5 }, magnitude_value: 12500, magnitude_unit: "acres" },
+      { id: "EONET_7102", title: "Mount Etna Eruption", category: "volcanoes", timestamp_utc: "2026-11-14T11:40:00Z", coordinates: { latitude_deg: 37.75, longitude_deg: 14.99 }, magnitude_value: 3, magnitude_unit: "VEI" },
+    ],
+  };
+}
+
+export function getFallbackSpaceData(queryType, identifier) {
+  const q = (queryType || "").toLowerCase();
+  const id = (identifier || "").toLowerCase();
+  const registry = createFallbackRegistry();
+
+  if (["mars_weather", "insight", "mars_storm", "meda"].includes(q)) return registry.mars_weather;
+  if (["historical", "mission", "telescope"].includes(q)) return registry.missions[id] || registry.missions.apollo_11;
+  if (["comparison", "planet_compare"].includes(q)) return registry.planets;
+  if (["neo", "neows", "asteroids"].includes(q)) return registry.neo;
+  if (["solar", "solar_flare", "noaa"].includes(q)) return registry.solar;
+  if (["spacecraft", "probe", "horizons"].includes(q)) return registry.spacecraft[id] || registry.spacecraft.voyager_1;
+  if (["iss", "space_station"].includes(q)) return registry.iss;
+  if (["apod", "astronomy_picture"].includes(q)) return registry.apod;
+  if (["eonet", "earth_events", "natural_events"].includes(q)) return registry.eonet;
+  return null;
+}
+
+// ============================================================================
+// DOSYA: src/services/nasaImageFilter.js
+// ============================================================================
+// NASA görsel arşivi sonuçlarından gerçek fotoğraf olmayan kayıtları eler: üzerine rota/harita çizilmiş
+// (GPS gibi işaretli) görseller, diyagramlar, illüstrasyonlar, animasyon kareleri. Bütün NASA görsel yolları kullanır.
+
+const NON_PHOTO_PATTERNS = [
+  /\bmaps?\b/, /\bmapping\b/, /\btraverse\b/, /\broutes?\b/, /\bpaths?\b/, /\bdrive(?:s|n)?\b/,
+  /\bannotat/, /\blabel(?:ed|led|s)?\b/, /\blanding ellipse/, /\bellipse\b/, /\bcontour/,
+  /\belevation\b/, /\btopograph/, /\bgeologic/, /\bdiagram/, /\bchart\b/, /\bgraphic/, /\binfographic/,
+  /\billustration/, /\bartist'?s? (?:concept|rendering|impression)/, /\banimation\b/, /\bsimulat/,
+  /\bplot\b/, /\bcomparison\b/, /\btimeline\b/, /\bpanel discussion/, /\bpress (?:briefing|conference)/,
+];
+
+/**
+ * Başlık + açıklama metni haritalı/işaretli grafik veya çizim gibi duruyorsa true döner.
+ */
+export function isNonPhotoImageText(text) {
+  const lower = String(text || "").toLowerCase();
+  return NON_PHOTO_PATTERNS.some((pattern) => pattern.test(lower));
+}
+
+/**
+ * NASA görsel arşivi öğesi (collection.items[]) gerçek gözlem fotoğrafı gibi duruyorsa true döner.
+ */
+export function isRealPhotoItem(item) {
+  const meta = Array.isArray(item?.data) ? item.data[0] : null;
+  if (!meta) return false;
+  const keywords = Array.isArray(meta.keywords) ? meta.keywords.join(" ") : "";
+  return !isNonPhotoImageText(`${meta.title || ""} ${meta.description || ""} ${keywords}`);
+}
+
+// ============================================================================
+// DOSYA: src/services/nasaPhotoRules.js
+// ============================================================================
+// NASA görsel arama kuralları, gezegen/araç eşleştirmeleri ve yedek fotoğraf sabitleri
+
+import { isRealPhotoItem } from "./nasaImageFilter.js";
+import { hasKeyword } from "./keywordMatch.js";
+
+export const UNIVERSAL_PHOTO_FALLBACKS = Object.freeze({
+  hubble: {
+    subject: "Hubble Space Telescope (HST)",
+    instrument: "Hubble Wide Field Camera 3 (WFC3) / ACS",
+    nasa_id: "STScI-Hubble-Latest",
+    title: "Hubble Deep Space Star-Forming Region & Galaxy Cluster",
+    image_url: "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001362/GSFC_20171208_Archive_e001362~orig.jpg",
+    hd_image_url: "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001362/GSFC_20171208_Archive_e001362~orig.jpg",
+    nasa_gallery_url: "https://science.nasa.gov/mission/hubble/multimedia/hubble-images/",
+    credit: "NASA/ESA/STScI",
+  },
+  jwst: {
+    subject: "James Webb Space Telescope (JWST)",
+    instrument: "NIRCam & MIRI (Near/Mid-Infrared)",
+    nasa_id: "JWST-NIRCam-Latest",
+    title: "James Webb Carina Nebula & Deep Field Infrared View",
+    image_url: "https://images-assets.nasa.gov/image/weic2205a/weic2205a~orig.jpg",
+    hd_image_url: "https://images-assets.nasa.gov/image/weic2205a/weic2205a~orig.jpg",
+    nasa_gallery_url: "https://science.nasa.gov/mission/webb/multimedia/images/",
+    credit: "NASA/ESA/CSA/STScI",
+  },
+  perseverance: {
+    subject: "NASA Mars 2020 Perseverance Rover",
+    instrument: "Mastcam-Z Left/Right Stereo Camera",
+    sol: 1415,
+    nasa_id: "PIA26242",
+    title: "Jezero Crater Neretva Vallis & Cheyava Falls Rock Sample",
+    image_url: "https://images-assets.nasa.gov/image/PIA26242/PIA26242~orig.jpg",
+    hd_image_url: "https://images-assets.nasa.gov/image/PIA26242/PIA26242~orig.jpg",
+    nasa_gallery_url: "https://science.nasa.gov/mission/mars-2020-perseverance/mars-images/",
+    coordinates: { latitude_deg: 18.38, longitude_deg: 77.58 },
+    credit: "NASA/JPL-Caltech/MSSS",
+  },
+  uranus: {
+    subject: "Uranus (Voyager 2 & James Webb / Hubble Observations)",
+    instrument: "JWST NIRCam & Voyager 2 Imaging Science Subsystem",
+    nasa_id: "PIA18182",
+    title: "Uranus as Seen by NASA's Voyager 2 & Space Telescopes",
+    date_taken_utc: "2023-04-06T00:00:00Z",
+    image_url: "https://images-assets.nasa.gov/image/PIA18182/PIA18182~orig.jpg",
+    hd_image_url: "https://images-assets.nasa.gov/image/PIA18182/PIA18182~orig.jpg",
+    first_nasa_id: "PIA00032",
+    first_title: "Uranus Incoming View by Voyager 2 (1986)",
+    first_date_taken_utc: "1986-01-25T00:00:00Z",
+    first_image_url: "https://images-assets.nasa.gov/image/PIA00032/PIA00032~orig.jpg",
+    first_hd_image_url: "https://images-assets.nasa.gov/image/PIA00032/PIA00032~orig.jpg",
+    nasa_gallery_url: "https://science.nasa.gov/uranus/",
+    credit: "NASA/JPL-Caltech/STScI",
+  },
+  default: {
+    subject: "NASA Deep Space & Solar System",
+    instrument: "NASA Space Science Optical/Infrared",
+    nasa_id: "NASA-APOD-Latest",
+    title: "NASA Astronomy Picture of the Day",
+    image_url: "https://apod.nasa.gov/apod/image/2411/M31_HubbleSpitzer_3000.jpg",
+    hd_image_url: "https://apod.nasa.gov/apod/image/2411/M31_HubbleSpitzer_3000.jpg",
+    nasa_gallery_url: "https://images.nasa.gov/",
+    credit: "NASA",
+  },
+});
+
+// "Mars uydusundan/yörüngeden çekilmiş" fotoğraf: yüzeydeki rover değil, Mars Reconnaissance Orbiter (HiRISE/CTX)
+const MARS_WORDS = ["mars", "kızıl gezegen", "kizil gezegen"];
+const ORBITER_WORDS = ["uydu", "yörünge", "yorunge", "orbiter", "hirise", "mro", "reconnaissance", "uzaydan", "yukarıdan", "yukaridan"];
+const MARS_ORBITER_CONFIG = Object.freeze({
+  key: "mars_orbiter",
+  searchQuery: "HiRISE Mars Reconnaissance Orbiter",
+  center: "JPL",
+  galleryUrl: "https://science.nasa.gov/mission/mars-reconnaissance-orbiter/",
+  instrumentDefault: "MRO HiRISE / CTX",
+  isMarsRover: false,
+});
+
+export function isMarsOrbiterPhotoIntent(lowerText) {
+  return MARS_WORDS.some((kw) => hasKeyword(lowerText, kw)) && ORBITER_WORDS.some((kw) => hasKeyword(lowerText, kw));
+}
+
+const PHOTO_SEARCH_RULES = [
+  {
+    keywords: ["hubble", "huble", "habble"],
+    key: "hubble",
+    searchQuery: "hubble",
+    center: "STScI",
+    galleryUrl: "https://science.nasa.gov/mission/hubble/multimedia/hubble-images/",
+    instrumentDefault: "Hubble Wide Field Camera 3 (WFC3)",
+  },
+  {
+    keywords: ["webb", "jwst"],
+    key: "jwst",
+    searchQuery: "webb",
+    center: "STScI",
+    galleryUrl: "https://science.nasa.gov/mission/webb/multimedia/images/",
+    instrumentDefault: "JWST NIRCam / MIRI",
+  },
+  {
+    keywords: ["curiosity"],
+    key: "curiosity",
+    searchQuery: "curiosity rover mars gale crater",
+    galleryUrl: "https://science.nasa.gov/mission/msl-curiosity/mars-images/",
+    instrumentDefault: "Curiosity Mastcam / MAHLI",
+  },
+  {
+    keywords: ["perseverance", "persev", "persav", "percev", "jezero", "rover", "mars"],
+    key: "perseverance",
+    searchQuery: "perseverance rover mars jezero",
+    galleryUrl: "https://science.nasa.gov/mission/mars-2020-perseverance/mars-images/",
+    instrumentDefault: "Perseverance Mastcam-Z / Navcam",
+    isMarsRover: true,
+  },
+  {
+    keywords: ["uranüs", "uranus"],
+    key: "uranus",
+    searchQuery: "uranus planet voyager hubble webb",
+    galleryUrl: "https://science.nasa.gov/uranus/",
+    instrumentDefault: "Voyager 2 ISS / Hubble WFC3 / JWST NIRCam",
+  },
+  {
+    keywords: ["neptün", "neptun", "neptune"],
+    key: "neptune",
+    searchQuery: "neptune planet voyager hubble webb",
+    galleryUrl: "https://science.nasa.gov/neptune/",
+    instrumentDefault: "Voyager 2 ISS / Hubble WFC3 / JWST NIRCam",
+  },
+  {
+    keywords: ["venüs", "venus"],
+    key: "venus",
+    searchQuery: "venus planet magellan mariner",
+    galleryUrl: "https://science.nasa.gov/venus/",
+    instrumentDefault: "Magellan SAR / Mariner 10",
+  },
+  {
+    keywords: ["merkür", "merkur", "mercury"],
+    key: "mercury",
+    searchQuery: "mercury planet messenger mariner",
+    galleryUrl: "https://science.nasa.gov/mercury/",
+    instrumentDefault: "MESSENGER MDIS",
+  },
+  {
+    keywords: ["plüton", "pluton", "pluto", "new horizons"],
+    key: "pluto",
+    searchQuery: "pluto new horizons",
+    galleryUrl: "https://science.nasa.gov/dwarf-planets/pluto/",
+    instrumentDefault: "New Horizons LORRI / Ralph",
+  },
+  {
+    keywords: ["satürn", "saturn", "cassini"],
+    key: "cassini",
+    searchQuery: "saturn rings cassini",
+    galleryUrl: "https://science.nasa.gov/saturn/multimedia/",
+    instrumentDefault: "Cassini ISS / Hubble WFC3",
+  },
+  {
+    keywords: ["jüpiter", "jupiter", "juno"],
+    key: "juno",
+    searchQuery: "jupiter juno",
+    galleryUrl: "https://www.missionjuno.swri.edu/junocam/",
+    instrumentDefault: "JunoCam Optical",
+  },
+  {
+    keywords: ["güneş", "gunes", "solar"],
+    key: "solar",
+    searchQuery: "sun solar flare sdo",
+    galleryUrl: "https://sdo.gsfc.nasa.gov/data/",
+    instrumentDefault: "NASA Solar Dynamics Observatory (AIA)",
+  },
+  {
+    keywords: ["moon", "apollo"],
+    wordKeywords: ["ay"],
+    key: "moon",
+    searchQuery: "apollo moon surface lunar reconnaissance",
+    galleryUrl: "https://science.nasa.gov/moon/",
+    instrumentDefault: "LRO Narrow Angle Camera / Apollo Hasselblad",
+  },
+  {
+    keywords: ["iss", "ıss", "uzay istasyon", "uzay ıstasyon"],
+    key: "iss",
+    searchQuery: "international space station earth orbit",
+    galleryUrl: "https://www.nasa.gov/international-space-station/",
+    instrumentDefault: "ISS External High-Definition Camera",
+  },
+  {
+    keywords: ["voyager"],
+    key: "voyager",
+    searchQuery: "voyager pale blue dot outer planets",
+    galleryUrl: "https://science.nasa.gov/mission/voyager/",
+    instrumentDefault: "Voyager Imaging Science Subsystem",
+  },
+  {
+    keywords: ["kara delik", "black hole"],
+    key: "black_hole",
+    searchQuery: "black hole event horizon chandra",
+    galleryUrl: "https://science.nasa.gov/universe/black-holes/",
+    instrumentDefault: "Event Horizon Telescope / Chandra X-Ray",
+  },
+  {
+    keywords: ["nebula", "bulutsu", "galaksi", "gökada", "andromeda"],
+    key: "hubble",
+    searchQuery: "nebula galaxy hubble james webb",
+    galleryUrl: "https://science.nasa.gov/mission/hubble/multimedia/hubble-images/",
+    instrumentDefault: "Hubble & JWST Deep Field Optical/IR",
+  },
+];
+
+function matchesWordKeyword(lowerText, word) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-zçğıöşü0-9])${escaped}([^a-zçğıöşü0-9]|$)`, "i").test(lowerText);
+}
+
+export function resolveNasaImageSearchConfig(promptText) {
+  const lower = String(promptText || "").toLowerCase().replace(/\u0307/g, "");
+  if (isMarsOrbiterPhotoIntent(lower)) return { ...MARS_ORBITER_CONFIG };
+  for (const rule of PHOTO_SEARCH_RULES) {
+    // Kelime başında aranır: "mars" → "Mars'ın" eşleşir, başka bir kelimenin içi eşleşmez
+    const hasSubstring = rule.keywords.some((kw) => hasKeyword(lower, kw));
+    const hasWord = Array.isArray(rule.wordKeywords)
+      ? rule.wordKeywords.some((wk) => matchesWordKeyword(lower, wk))
+      : false;
+    if (hasSubstring || hasWord) {
+      return {
+        key: rule.key,
+        searchQuery: rule.searchQuery,
+        center: rule.center || null,
+        galleryUrl: rule.galleryUrl,
+        instrumentDefault: rule.instrumentDefault,
+        isMarsRover: Boolean(rule.isMarsRover),
+      };
+    }
+  }
+  return {
+    key: "default",
+    searchQuery: "nebula galaxy deep space",
+    center: null,
+    galleryUrl: "https://images.nasa.gov/",
+    instrumentDefault: "NASA Space Telescope",
+    isMarsRover: false,
+  };
+}
+
+const NON_SPACE_EVENT_WORDS = [
+  "launch", "liftoff", "falcon", "ariane", "kennedy space center", "rollout",
+  "panel discussion", "audience", "headquarters", "conference", "auditorium",
+  "press briefing", "ceremony", "award", "administrator", "speaking",
+  "portrait", "workshop", "symposium", "meeting", "cleanroom", "illustration",
+  "artist's concept", "artist concept",
+];
+
+export function isSpaceObservationItem(item) {
+  const meta = item?.data?.[0];
+  if (!meta) return false;
+  if (meta.center === "HQ") return false;
+  const text = `${meta.title || ""} ${meta.description || ""}`.toLowerCase();
+  return !NON_SPACE_EVENT_WORDS.some((w) => text.includes(w)) && isRealPhotoItem(item);
+}
+
+export function hasFirstAndLatestIntent(promptText) {
+  const lower = String(promptText || "").toLowerCase();
+  const hasFirst = ["ilk", "eski", "first", "oldest", "earliest"].some((w) => matchesWordKeyword(lower, w) || lower.includes("ilk çek"));
+  const hasLatest = ["son", "yeni", "güncel", "guncel", "latest", "newest", "recent"].some((w) => matchesWordKeyword(lower, w) || lower.includes("son çek"));
+  return Boolean(hasFirst && hasLatest);
+}
+
+const LATEST_INTENT_KEYWORDS = [
+  "en güncel", "en guncel", "en son", "son çek", "son cek",
+  "güncel", "guncel", "en yeni", "yeni çek", "yeni cek",
+  "latest", "newest", "recent", "bugün", "bugun",
+];
+
+export function hasLatestIntent(promptText) {
+  if (hasFirstAndLatestIntent(promptText)) return false;
+  const lower = String(promptText || "").toLowerCase();
+  return LATEST_INTENT_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+// ============================================================================
+// DOSYA: src/services/nasaPhotoFetcher.js
+// ============================================================================
+// NASA canlı ve yedek fotoğraf adaylarını getiren servis modülü
+
+import {
+  UNIVERSAL_PHOTO_FALLBACKS,
+  hasFirstAndLatestIntent,
+  hasLatestIntent,
+  isSpaceObservationItem,
+  resolveNasaImageSearchConfig,
+} from "./nasaPhotoRules.js";
+
+export { resolveNasaImageSearchConfig, hasFirstAndLatestIntent };
+
+const shownPhotoIds = new Set();
+
+export function clearShownPhotoHistory() {
+  shownPhotoIds.clear();
+}
+
+export function markPhotoAsShown(nasaId) {
+  if (nasaId) shownPhotoIds.add(nasaId);
+}
+
+async function fetchMarsRoverRawCandidates(cfg, todayIso, limit = 10, preferLatest = false) {
+  try {
+    const page = preferLatest ? 0 : Math.floor(shownPhotoIds.size / 15);
+    const rssRes = await fetch(
+      `https://mars.nasa.gov/rss/api/?feed=raw_images&category=mars2020,ingenuity&feedtype=json&num=25&page=${page}&order=sol+desc`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (!rssRes.ok) return [];
+    const rssData = await rssRes.json();
+    const images = Array.isArray(rssData?.images) ? rssData.images : [];
+
+    const mapped = [];
+    for (const img of images) {
+      const imgUrl = img?.image_files?.full_res || img?.image_files?.large;
+      if (!imgUrl) continue;
+      const nasaId = img.imageid || `MARS2020-SOL${img.sol ?? 0}-${mapped.length}`;
+      if (shownPhotoIds.has(nasaId)) continue;
+
+      mapped.push({
+        subject: "NASA Mars 2020 Perseverance Rover",
+        nasa_id: nasaId,
+        sol: img.sol ?? 1415,
+        camera: img.camera?.instrument || cfg.instrumentDefault,
+        date_taken_utc: img.date_taken_utc || todayIso,
+        image_url: imgUrl,
+        hd_image_url: imgUrl,
+        nasa_gallery_url: "https://mars.nasa.gov/mars2020/multimedia/raw-images/",
+        title: img.title || `Perseverance Sol ${img.sol ?? ""} Yüzey Görüntüsü`,
+        description: img.caption || "Mars 2020 Perseverance ham yüzey görüntüsü.",
+        coordinates: { latitude_deg: 18.38, longitude_deg: 77.58 },
+        credit: "NASA/JPL-Caltech/ASU",
+      });
+      if (mapped.length >= limit) break;
+    }
+    return mapped;
+  } catch (err) {
+    console.warn("Mars rover canlı görsel servisine ulaşılamadı:", err.message);
+    return [];
+  }
+}
+
+async function queryNasaImagesApi(searchQuery, yearStart = null, center = null, pageSize = 25) {
+  const params = new URLSearchParams({
+    q: searchQuery,
+    media_type: "image",
+    page_size: String(pageSize),
+  });
+  if (yearStart) params.set("year_start", String(yearStart));
+  if (center) params.set("center", center);
+
+  const url = `https://images-api.nasa.gov/search?${params.toString()}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(4500) });
+  if (!res.ok) return [];
+
+  const data = await res.json();
+  const items = data?.collection?.items || [];
+  return items.filter(
+    (it) => it?.data?.[0] && it?.links?.[0]?.href && it.links[0].href.startsWith("http")
+  );
+}
+
+function mapLibraryItemToPhoto(top, cfg, todayIso) {
+  const meta = top.data[0];
+  const previewUrl = top.links[0].href;
+  return {
+    subject: meta.title || cfg.searchQuery.toUpperCase(),
+    nasa_id: meta.nasa_id || "NASA-IMG",
+    camera: cfg.instrumentDefault,
+    center: meta.center || "NASA/STScI/JPL",
+    date_taken_utc: meta.date_created || todayIso,
+    title: meta.title || "NASA Official Space Image",
+    description: (meta.description || "").slice(0, 450),
+    image_url: previewUrl,
+    hd_image_url: previewUrl.replace(/~(thumb|small|medium|large)\./, "~orig."),
+    nasa_gallery_url: cfg.galleryUrl,
+    credit: meta.photographer || meta.secondary_creator || "NASA Official Archive",
+  };
+}
+
+function combineFirstAndLatestPhotos(firstPhoto, latestPhoto) {
+  return {
+    ...latestPhoto,
+    first_nasa_id: firstPhoto.nasa_id,
+    first_title: firstPhoto.title,
+    first_date_taken_utc: firstPhoto.date_taken_utc,
+    first_image_url: firstPhoto.image_url,
+    first_hd_image_url: firstPhoto.hd_image_url || firstPhoto.image_url,
+    description: `İLK FOTOĞRAF (${firstPhoto.date_taken_utc} - ${firstPhoto.title}): ${firstPhoto.description || ""} | SON FOTOĞRAF (${latestPhoto.date_taken_utc} - ${latestPhoto.title}): ${latestPhoto.description || ""}`,
+  };
+}
+
+async function fetchFirstAndLatestPair(cfg, todayIso) {
+  try {
+    let validItems = await queryNasaImagesApi(cfg.searchQuery, null, cfg.center, 80);
+    if (validItems.length < 2 && cfg.center) {
+      validItems = await queryNasaImagesApi(cfg.searchQuery, null, null, 80);
+    }
+    const observations = validItems.filter(isSpaceObservationItem);
+    const pool = observations.length >= 2 ? observations : validItems;
+    if (pool.length === 0) return [];
+
+    pool.sort((a, b) => {
+      const da = new Date(a.data[0].date_created || 0).getTime();
+      const db = new Date(b.data[0].date_created || 0).getTime();
+      return da - db;
+    });
+
+    const oldestPhoto = mapLibraryItemToPhoto(pool[0], cfg, todayIso);
+    const newestPhoto = mapLibraryItemToPhoto(pool[pool.length - 1], cfg, todayIso);
+    return [combineFirstAndLatestPhotos(oldestPhoto, newestPhoto)];
+  } catch (err) {
+    console.warn("İlk ve son görsel arşivi sorgusu başarısız:", err.message);
+    return [];
+  }
+}
+
+async function fetchNasaImageLibraryCandidates(cfg, todayIso, resultIndex = 0, limit = 10, preferLatest = false) {
+  try {
+    const currentYear = new Date(todayIso).getUTCFullYear();
+    const minNeeded = Math.max(limit, resultIndex + 1 + shownPhotoIds.size);
+    let validItems = [];
+
+    if (preferLatest) {
+      validItems = await queryNasaImagesApi(cfg.searchQuery, currentYear - 2, cfg.center, 35);
+    }
+    if (validItems.filter(isSpaceObservationItem).length < minNeeded) {
+      validItems = await queryNasaImagesApi(cfg.searchQuery, null, cfg.center, 50);
+    }
+    if (validItems.filter(isSpaceObservationItem).length < minNeeded && cfg.center) {
+      validItems = await queryNasaImagesApi(cfg.searchQuery, null, null, 50);
+    }
+    if (validItems.length === 0) return [];
+
+    const observations = validItems.filter(isSpaceObservationItem);
+    const pool = observations.length > 0 ? observations : validItems;
+
+    if (preferLatest) {
+      pool.sort((a, b) => {
+        const da = new Date(a.data[0].date_created || 0).getTime();
+        const db = new Date(b.data[0].date_created || 0).getTime();
+        return db - da;
+      });
+    }
+
+    const unseenPool = pool.filter((item) => !shownPhotoIds.has(item.data[0].nasa_id));
+    const activePool = unseenPool.length > 0 ? unseenPool : pool;
+    const startIdx = resultIndex > 0 ? resultIndex % activePool.length : 0;
+    const rotated = [...activePool.slice(startIdx), ...activePool.slice(0, startIdx)];
+
+    return rotated.slice(0, limit).map((item) => mapLibraryItemToPhoto(item, cfg, todayIso));
+  } catch (err) {
+    console.warn("NASA görsel arşivi sorgusu başarısız:", err.message);
+    return [];
+  }
+}
+
+function buildFallbackCandidate(cfg, todayIso, wantBoth) {
+  const fb = UNIVERSAL_PHOTO_FALLBACKS[cfg.key] || UNIVERSAL_PHOTO_FALLBACKS.default;
+  const base = {
+    ...fb,
+    date_taken_utc: fb.date_taken_utc || todayIso,
+    description: `${fb.title} — Resmi NASA arşiv kaydı.`,
+  };
+  if (wantBoth && !base.first_image_url) {
+    base.first_nasa_id = `${base.nasa_id}-FIRST`;
+    base.first_title = `${base.subject} İlk Arşiv Görüntüsü`;
+    base.first_date_taken_utc = "1986-01-25T00:00:00Z";
+    base.first_image_url = base.image_url;
+    base.first_hd_image_url = base.hd_image_url || base.image_url;
+  }
+  return base;
+}
+
+export async function fetchUniversalNasaPhotoCandidates(promptText, resultIndex = 0, limit = 10) {
+  const cfg = resolveNasaImageSearchConfig(promptText);
+  const todayIso = new Date().toISOString();
+  const wantBoth = hasFirstAndLatestIntent(promptText);
+  const preferLatest = hasLatestIntent(promptText);
+
+  if (wantBoth) {
+    const pairList = await fetchFirstAndLatestPair(cfg, todayIso);
+    if (pairList.length > 0) return pairList;
+    return [buildFallbackCandidate(cfg, todayIso, true)];
+  }
+
+  if (cfg.isMarsRover) {
+    const marsList = await fetchMarsRoverRawCandidates(cfg, todayIso, limit, preferLatest);
+    if (marsList.length > 0) return marsList;
+  }
+
+  const libList = await fetchNasaImageLibraryCandidates(cfg, todayIso, resultIndex, limit, preferLatest);
+  if (libList.length > 0) return libList;
+
+  return [buildFallbackCandidate(cfg, todayIso, false)];
+}
+
+export async function fetchUniversalNasaPhoto(promptText, resultIndex = 0) {
+  const candidates = await fetchUniversalNasaPhotoCandidates(promptText, resultIndex, 1);
+  const chosen = candidates[0];
+  if (chosen?.nasa_id) markPhotoAsShown(chosen.nasa_id);
+  return chosen;
+}
+
+// ============================================================================
+// DOSYA: src/services/generalImageFetcher.js
+// ============================================================================
+// Genel soru pop-up'ı için konunun görselini bulur (sunucuda çalışır).
+// Sıra: Wikipedia araması → bulunan sayfanın özet görseli (İngilizce terim, sonra Türkçe başlık) → NASA görsel arşivi.
+// Anahtarsız ve açık kaynaklar kullanılır; hiçbiri bulunamazsa null döner, pop-up yine açılır.
+
+import { isRealPhotoItem } from "./nasaImageFilter.js";
+
+const REQUEST_TIMEOUT_MS = 6000;
+const MAX_ORIGINAL_IMAGE_PX = 2400;
+const PREFERRED_THUMB_PX = 1280;
+// Wikimedia API kuralı: istemci kendini tanıtan bir User-Agent göndermeli
+const USER_AGENT = "Aluma/1.0 (egitim amacli uzay platformu)";
+const wikiSearchUrl = (lang, term) => `https://${lang}.wikipedia.org/w/rest.php/v1/search/page?q=${encodeURIComponent(term)}&limit=5`;
+const wikiSummaryUrl = (lang, key) => `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(key)}`;
+const NASA_IMAGES_SEARCH_URL = "https://images-api.nasa.gov/search";
+
+async function getJson(fetchFn, url) {
+  const resp = await fetchFn(url, { headers: { Accept: "application/json", "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  if (!resp?.ok) return null;
+  return await resp.json();
+}
+
+// Çok büyük özgün görsel yerine makul boyutlu küçük resim kullanılır (yükleme süresi)
+function pickSummaryImage(summary) {
+  const original = summary?.originalimage;
+  if (original?.source && (!original.width || original.width <= MAX_ORIGINAL_IMAGE_PX)) return original.source;
+  const thumb = summary?.thumbnail?.source;
+  return thumb ? thumb.replace(/\/\d+px-/, `/${PREFERRED_THUMB_PX}px-`) : original?.source || "";
+}
+
+async function findWikipediaImage(fetchFn, lang, term) {
+  // Gemini terimi tam sayfa başlığı olmayabilir ("black hole accretion disk"); önce en iyi eşleşen sayfa aranır
+  const search = await getJson(fetchFn, wikiSearchUrl(lang, term));
+  const page = Array.isArray(search?.pages) ? search.pages.find((p) => p?.key && p?.thumbnail) : null;
+  if (!page) return null;
+  const summary = await getJson(fetchFn, wikiSummaryUrl(lang, page.key));
+  const image_url = pickSummaryImage(summary);
+  if (!image_url || summary?.type === "disambiguation") return null;
+  return {
+    image_url,
+    image_title: String(summary.title || page.title || term),
+    image_source: `Wikipedia (${lang})`,
+    image_page_url: summary?.content_urls?.desktop?.page || "",
+  };
+}
+
+async function findNasaImage(fetchFn, term) {
+  const params = new URLSearchParams({ q: term, media_type: "image" });
+  const json = await getJson(fetchFn, `${NASA_IMAGES_SEARCH_URL}?${params.toString()}`);
+  const item = Array.isArray(json?.collection?.items) ? json.collection.items.find((i) => i?.links?.[0]?.href && isRealPhotoItem(i)) : null;
+  if (!item) return null;
+  return {
+    image_url: item.links[0].href,
+    image_title: String(item.data?.[0]?.title || term),
+    image_source: "NASA Görsel Arşivi",
+    image_page_url: "",
+  };
+}
+
+/**
+ * imageQuery: İngilizce arama terimi (Gemini'nin image_query alanı), trTitle: Türkçe başlık (yedek).
+ */
+export async function fetchGeneralTopicImage(imageQuery, trTitle = "", fetchFn = globalThis.fetch) {
+  if (typeof fetchFn !== "function") return null;
+  const attempts = [];
+  if (typeof imageQuery === "string" && imageQuery.trim()) attempts.push(() => findWikipediaImage(fetchFn, "en", imageQuery.trim()));
+  if (typeof trTitle === "string" && trTitle.trim()) attempts.push(() => findWikipediaImage(fetchFn, "tr", trTitle.trim()));
+  if (typeof imageQuery === "string" && imageQuery.trim()) attempts.push(() => findNasaImage(fetchFn, imageQuery.trim()));
+  for (const attempt of attempts) {
+    try {
+      const found = await attempt();
+      if (found) return found;
+    } catch (err) {
+      console.warn("Genel soru görseli aranamadı:", err?.message);
+    }
+  }
+  return null;
+}
+
+// ============================================================================
+// DOSYA: src/services/richContent.js
+// ============================================================================
+// Pop-up ve bilgi kartlarını niyete göre dolduran zengin içerik alanları: Gemini'ye kural metni ve gelen değerin doğrulaması.
+
+export const RICH_CONTENT_PARAM_KEYS = new Set(["description", "facts", "sections", "image_query", "is_general_question", "is_off_topic"]);
+
+const MAX_DESCRIPTION_CHARS = 1400;
+const MAX_FACTS = 10;
+const MAX_SECTIONS = 4;
+const MAX_IMAGE_QUERY_CHARS = 80;
+
+export const RICH_CONTENT_INSTRUCTION =
+  "4. ZENGİN İÇERİK: Ekrandaki pop-up ve bilgi kartı parameters'tan dolar, kısa kalmasın. Kullanıcının TAM olarak ne sorduğuna (niyetine) göre doldur:\n" +
+  "- title: konunun kısa başlığı.\n" +
+  "- description: soruya doğrudan cevap veren 3-5 cümlelik, somut sayı ve bilgiler içeren açıklama.\n" +
+  '- facts: niyete uygun 4-8 satır [{"label": "...", "value": "..."}]. Gezegen için çap, kütle, yerçekimi, gün ve yıl uzunluğu, uydu sayısı, sıcaklık; görev veya araç için fırlatma tarihi, ajans, hedef, durum; olay için tarih, konum, büyüklük; matematik/fizik sorusu için verilenler, formül ve sonuç gibi.\n' +
+  '- sections: 1-3 bölüm [{"heading": "...", "body": "2-3 cümle"}] (ör. Nasıl oluşur?, Çözüm adımları, Neden önemli?, İlginç bilgi).\n' +
+  '- image_query: Uzay, gök cisimleri, astronomi, uzay araçları VEYA görselle/diyagramla desteklenebilecek matematik/geometri/fizik konularında konunun görselini bulmak için tam İNGİLİZCE Wikipedia madde başlığı (ör. "black hole", "Jupiter Great Red Spot", "Pythagorean theorem", "Navier-Stokes equations", "Square root", "Derivative"). DİKKAT: "complex math blackboard" gibi uydurma/süsleme kelimeler YAZMA, doğrudan kavramın/teoremin ansiklopedik İngilizce adını yaz. Günlük sohbet/kişisel sorularda, henüz konusu belli olmayan genel ödev cümlelerinde ("matematik ödevime yardım et" gibi) ve alakasız konularda image_query KESİNLİKLE EKLEME.\n' +
+  "speech_text ise bunların 1-3 cümlelik sesli özetidir; description'ı aynen tekrar etme.";
+
+export const GENERAL_QUESTION_INSTRUCTION =
+  "5. GENEL SORU, MATEMATİK VE SOHBET AYRIMI:\n" +
+  "- UZAY/ASTRONOMİ GENEL SORUSU: Soru belirli bir gök cismine/araca bağlı değil ama doğrudan uzay, astronomi veya astrofizik kavramı/kişisi hakkındaysa (kara delik nedir, ışık yılı nedir, Isaac Newton kimdir, süpernova nasıl oluşur): action_type 'OPEN_POPUP', template_id 'NONE', parameters.is_general_question true ve image_query doldur.\n" +
+  "- BELİRLİ GÖK CİSMİ/ARAÇ SORUSU: Soru belirli bir cisim/araç/yerle doğrudan ilgiliyse (Aya ilk ayak basan insan kim, Mars'ta su var mı, Voyager ne zaman fırlatıldı, Jüpiter'in en büyük uydusu): is_general_question ekleme, target_object ile o cismi ver, action_type 'FOCUS_OBJECT' kullan ve image_query doldur.\n" +
+  "- DOĞAL AFET VE DEPREM SORULARI (NASA EONET & USGS): Deprem, deprem şiddeti/büyüklüğü, derinliği, sismograf/sismik aktivite, merkez üssü, volkan, yangın, fırtına ve sel soruları sistemin doğrudan parçasıdır; ASLA 'sismograf verilerini veya deprem şiddetlerini takip edemem' diyerek reddetme. Aday olayların tüm verilerini (büyüklük/şiddet Mw, derinlik km, enlem ve boylam koordinatları, tarih/saat, merkez üssü/bölge, durum ve kaynak) speech_text, description ve facts içinde eksiksiz sun.\n" +
+  "- MATEMATİK / GEOMETRİ / FİZİK ÖDEV VE SORULARI: Matematik, geometri ve fizik sorularını (karekök, teoremler, en zor formüller, hız-yol-zaman problemleri vb.) doğrudan, adım adım ve anlaşılır şekilde CEVAPLA. Eğer sorulan matematik/fizik konusu bir diyagram, grafik, geometrik şekil veya ünlü denklem/teorem görseliyle desteklenmeye uygunsa (ör. karekök diyagramı, Pisagor teoremi, Navier-Stokes denklemleri, türev/integral grafiği, hız-zaman grafiği) action_type 'OPEN_POPUP', parameters.is_general_question true seç ve image_query alanına o matematiksel kavramın TAM İNGİLİZCE Wikipedia başlığını (ör. 'Square root', 'Pythagorean theorem', 'Navier-Stokes equations', 'Velocity') yaz. Görsel gerektirmeyen soyut/genel ifadelerde ('matematik ödevime yardım eder misin' gibi) ise action_type 'SHOW_FACT_CARD' seç ve image_query ekleme.\n" +
+  "- GÜNLÜK SOHBET VE KİŞİSEL/SİSTEM SORULARI (CEVAPLA AMA RESİM KOYMA): 'naber', 'nasılsın', 'hayat nasıl gidiyor', 'bana kendinden bahset', 'kişilik özelliklerin var mı', 'her zaman doğruyu söylüyor musun' gibi soruları doğrudan cevapla; ancak bunlarda HER ZAMAN action_type 'SHOW_FACT_CARD', template_id 'NONE' seç ve parameters içine is_general_question veya image_query KESİNLİKLE EKLEME.";
+
+function cleanString(value, maxChars) {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().slice(0, maxChars);
+}
+
+function sanitizeFacts(value) {
+  if (!Array.isArray(value)) return null;
+  const facts = value
+    .map((entry) => (entry && typeof entry === "object" ? { label: cleanString(entry.label, 48), value: cleanString(entry.value, 160) } : null))
+    .filter((entry) => entry && entry.label && entry.value)
+    .slice(0, MAX_FACTS);
+  return facts.length > 0 ? facts : null;
+}
+
+function sanitizeSections(value) {
+  if (!Array.isArray(value)) return null;
+  const sections = value
+    .map((entry) => (entry && typeof entry === "object" ? { heading: cleanString(entry.heading, 80), body: cleanString(entry.body, 700) } : null))
+    .filter((entry) => entry && entry.body)
+    .slice(0, MAX_SECTIONS);
+  return sections.length > 0 ? sections : null;
+}
+
+/**
+ * Zengin içerik alanını doğrular; geçersizse null döner (alan eklenmez). Hata fırlatmaz.
+ */
+export function sanitizeRichContentParam(key, value) {
+  if (key === "description") return cleanString(value, MAX_DESCRIPTION_CHARS) || null;
+  if (key === "facts") return sanitizeFacts(value);
+  if (key === "sections") return sanitizeSections(value);
+  if (key === "image_query") return cleanString(value, MAX_IMAGE_QUERY_CHARS) || null;
+  if (key === "is_general_question") return value === true ? true : null;
+  if (key === "is_off_topic") return value === true ? true : null;
+  return null;
+}
+
+// ============================================================================
+// DOSYA: src/services/sceneIntentGuard.js
+// ============================================================================
+// Sahne şablonu bekçisi ve sahne hedefi kuralları.
+// Gemini bir cismin adını görünce o cismin özel sahnesini açabiliyor ("Güneş'te uzay aracı var mı?" → patlama).
+// Şablon ancak kullanıcı o olayı gerçekten istediyse açılır; değilse NONE olur ve odak hedefe gider.
+
+import { hasKeyword } from "./keywordMatch.js";
+
+// Şablon → kullanıcının söylemesi gereken kelimelerden en az biri
+const TEMPLATE_INTENT_WORDS = Object.freeze({
+  SOLAR_FLARE: ["patlama", "parlama", "flare", "fırtına", "firtina", "cme", "koronal", "püskürme", "puskurme", "güneş rüzgar", "gunes ruzgar", "radyasyon"],
+  NEO_SWARM: ["asteroit", "asteroid", "göktaşı", "goktasi", "neo", "meteor", "çarpma", "carpma", "apophis", "bennu"],
+  LIGHT_DELAY: ["ışık", "isik", "gecikme", "sinyal", "haberleşme", "haberlesme", "iletişim", "iletisim", "light"],
+});
+
+// Şablona bağlı, şablon iptal edilince anlamsız kalan parametreler
+const TEMPLATE_ONLY_PARAMS = Object.freeze({
+  SOLAR_FLARE: ["flare_class"],
+  NEO_SWARM: ["asteroids", "query_mode", "requested_count"],
+  LIGHT_DELAY: [],
+});
+
+/**
+ * Kullanıcının sözleri şablonu desteklemiyorsa şablonu NONE yapar (rota yerinde güncellenir).
+ */
+export function applyTemplateIntentGuard(route, promptText) {
+  const templateId = route?.template_id;
+  const words = TEMPLATE_INTENT_WORDS[templateId];
+  if (!words || words.some((word) => hasKeyword(String(promptText || "").toLocaleLowerCase("tr-TR"), word))) return route;
+  route.template_id = "NONE";
+  for (const key of TEMPLATE_ONLY_PARAMS[templateId]) delete route.parameters?.[key];
+  return route;
+}
+
+export const SCENE_TARGET_INSTRUCTION =
+  "6. SAHNE HEDEFİ (ODAK): Cevabın konusu belirli bir cisim veya uzay aracıysa onu parameters.target_object olarak yaz ve action_type 'FOCUS_OBJECT' kullan (bilgi istense de). Geçerli hedefler:\n" +
+  "- Gezegen/uydu/cüce gezegen: SUN, MERCURY, VENUS, EARTH, MOON, MARS, JUPITER, IO, EUROPA, GANYMEDE, CALLISTO, SATURN, TITAN, URANUS, NEPTUNE, TRITON, CERES, PLUTO, HAUMEA, MAKEMAKE, ERIS.\n" +
+  "- Uzay araçları: ISS, HUBBLE, JWST, PARKER (Parker Güneş Sondası), NEW_HORIZONS, VOYAGER_1, VOYAGER_2, MARS_PHOTO_SAT (Mars yörünge fotoğraf uydusu).\n" +
+  "- Mars yüzeyi: PERSEVERANCE, CURIOSITY, INGENUITY, PATHFINDER.\n" +
+  "- Tekil 3D model sahnesi (Güneş Sistemi'nde yeri yok): ASTRONAUT_SUIT (astronot kıyafeti), SATURN_V (roket), APOLLO_LUNAR_MODULE (Apollo ay modülü). Kullanıcı bunları görmek isterse bu kimliği yaz.\n" +
+  "Soru bir cismin YAKININDAKİ aracı soruyorsa hedef cisim değil araçtır (ör. 'Güneş'te/Güneş'e yakın uzay aracı var mı?' → target_object 'PARKER').\n" +
+  "template_id 'SOLAR_FLARE' YALNIZCA kullanıcı Güneş patlaması/parlaması/fırtınası/CME istediğinde, 'NEO_SWARM' YALNIZCA asteroit/göktaşı sorulduğunda, 'LIGHT_DELAY' YALNIZCA ışık/sinyal gecikmesi sorulduğunda seçilir; bir cismin adı geçti diye seçme.";
+
+// ============================================================================
+// DOSYA: src/services/generalQuestion.js
+// ============================================================================
+// Genel soru niyeti: Güneş Sistemi'nde odak yapılmaz, geniş bilgi penceresi (OPEN_POPUP) açılır ve konunun görseli eklenir.
+
+import { fetchGeneralTopicImage } from "./generalImageFetcher.js";
+
+// Sahne/kamera seçtirebilecek hedef alanları genel soruda rotadan çıkarılır
+const SCENE_TARGET_KEYS = ["primary_object", "secondary_object", "target_object", "source", "target", "mode"];
+
+const OFF_TOPIC_STRIP_KEYS = [
+  ...SCENE_TARGET_KEYS,
+  "is_general_question",
+  "image_query",
+  "image_url",
+  "hd_image_url",
+  "first_image_url",
+  "first_hd_image_url",
+  "first_nasa_id",
+  "first_title",
+  "first_date_taken_utc",
+  "nasa_id",
+  "nasa_gallery_url",
+  "photo_title",
+  "camera",
+  "center",
+  "date_taken_utc",
+  "credit",
+  "supporting_photo",
+  "image_title",
+  "image_source",
+  "image_page_url",
+  "facts",
+  "sections",
+];
+
+/**
+ * Alakasız (kapsam dışı) sorularda tüm görsel, genel soru ve hedef alanlarını temizler;
+ * pop-up açılmasını engeller ve yalnızca metin kartı (SHOW_FACT_CARD) gösterilmesini garanti eder.
+ */
+export function enforceOffTopicRoute(route) {
+  const params = route?.parameters;
+  if (!params || Array.isArray(params.events)) return false;
+
+  const combinedText = `${params.title || ""} ${params.description || ""} ${route.speech_text || ""}`;
+  const looksLikeRefusal = /uzay alanı dışı|kapsam dışı|uzay ve astronomi sınırları|bunu kesinlikle yapamam|alakasız/i.test(combinedText);
+  if (!params.is_off_topic && !looksLikeRefusal) return false;
+
+  route.action_type = "SHOW_FACT_CARD";
+  route.template_id = "NONE";
+  params.is_off_topic = true;
+  params.data_source = "GEMINI";
+  for (const key of OFF_TOPIC_STRIP_KEYS) delete params[key];
+  if (!params.title) params.title = "Kapsam Dışı İstek";
+  if (!params.description && route.speech_text) params.description = route.speech_text;
+  return true;
+}
+
+/**
+ * Rota genel soru ise yerinde günceller: hedefleri siler, OPEN_POPUP + NONE yapar, görsel yoksa arar.
+ * Afet listesi (EONET) veya kapsam dışı (is_off_topic) rotalara dokunmaz.
+ */
+export async function applyGeneralQuestionRoute(route, promptText = "", fetchFn = globalThis.fetch) {
+  const params = route?.parameters;
+  if (!params || enforceOffTopicRoute(route)) return route;
+  if (route.action_type === "SHOW_FACT_CARD") {
+    if (params.is_general_question) {
+      for (const key of SCENE_TARGET_KEYS) delete params[key];
+    }
+    delete params.is_general_question;
+    delete params.image_query;
+    return route;
+  }
+  if (!params.is_general_question || Array.isArray(params.events)) return route;
+
+  route.action_type = "OPEN_POPUP";
+  route.template_id = "NONE";
+  for (const key of SCENE_TARGET_KEYS) delete params[key];
+  if (!params.title) params.title = promptText;
+
+  if (!params.image_url) {
+    const image = await fetchGeneralTopicImage(params.image_query, params.title, fetchFn);
+    if (image) Object.assign(params, image);
+  }
+  return route;
+}
+
+// Görsel eklenmeyecek aksiyonlar: karşılaştırma kendi sahnesini çizer, bilgi kartı/sıfırlama/panel kapatma görsel istemez
+// Kendi özel sahnesini çizen şablonlar fotoğraf penceresi istemez (APOLLO_11 gibi konu şablonları ister)
+const SCENE_TEMPLATES = new Set(["SOLAR_FLARE", "NEO_SWARM", "LIGHT_DELAY", "GRAVITY_SIM"]);
+const NO_PHOTO_ACTIONS = new Set(["SHOW_FACT_CARD", "SHOW_COMPARISON", "RESET_VIEW", "CLOSE_PANEL", "SHOW_TIMELINE", "ADD_TO_HOMEWORK", "SHOW_HOMEWORK_BASKET", "EXPORT_PDF"]);
+
+/**
+ * Odaklanılan/anlatılan konunun görseli de gelsin: Gemini image_query verdiyse fotoğraf aranır ve rota
+ * `supporting_photo` ile işaretlenir; UI sahnede odağı korurken fotoğrafı pop-up penceresinde de gösterir.
+ * Afet listesi, NASA fotoğraf rotası (zaten image_url var), genel soru ve özel sahne şablonlarına dokunmaz.
+ */
+export async function attachSupportingPhoto(route, fetchFn = globalThis.fetch) {
+  const params = route?.parameters;
+  if (!params || params.is_off_topic || params.is_general_question || Array.isArray(params.events) || params.image_url) return route;
+  if (NO_PHOTO_ACTIONS.has(route.action_type) || SCENE_TEMPLATES.has(route.template_id)) return route;
+  if (typeof params.image_query !== "string" || !params.image_query.trim()) return route;
+
+  const image = await fetchGeneralTopicImage(params.image_query, params.title || "", fetchFn);
+  if (image) Object.assign(params, image, { supporting_photo: true });
+  return route;
+}
+
+// ============================================================================
+// DOSYA: src/services/earthEventFocus.js
+// ============================================================================
+// EONET olay listesinden kullanıcının sorduğu olayı seçer (saf fonksiyonlar).
+// Kural: soruya uyan olay yoksa HİÇBİR olay seçilmez; küre rastgele bir yeri afet varmış gibi işaretlemez.
+// Seçimi önce Gemini yapar (aday listesi + "NONE" seçeneği), Gemini yoksa yerel seçici çalışır.
+
+const MAX_ROUTE_EVENTS = 12;
+const MAX_GEMINI_CANDIDATES = 20;
+const MIN_TOKEN_LENGTH = 4;
+const ACTIVE_HINTS = ["aktif", "su an", "suan", "devam eden", "suren", "guncel", "simdi"];
+export const NO_EVENT_MATCH_ID = "NONE";
+
+// Türkçe yer adı → EONET başlıklarındaki (İngilizce) karşılıkları. Kök eşleşir: "türkiye'de" → "turkiye"
+const PLACE_ALIASES = Object.freeze({
+  turkiye: ["turkey", "turkiye"], endonezya: ["indonesia"], japonya: ["japan"], italya: ["italy"], sicilya: ["sicily"],
+  yunanistan: ["greece"], kibris: ["cyprus"], sili: ["chile"], meksika: ["mexico"], amerika: ["united states", "usa", "u.s."],
+  abd: ["united states", "usa", "u.s."], kaliforniya: ["california"], teksas: ["texas"], florida: ["florida"], alaska: ["alaska"],
+  havai: ["hawaii"], kanada: ["canada"], avustralya: ["australia"], izlanda: ["iceland"], filipin: ["philippines"],
+  hindistan: ["india"], cin: ["china"], rusya: ["russia"], kamcatka: ["kamchatka"], brezilya: ["brazil"], arjantin: ["argentina"],
+  peru: ["peru"], ekvador: ["ecuador"], kolombiya: ["colombia"], guatemala: ["guatemala"], nikaragua: ["nicaragua"],
+  "yeni zelanda": ["new zealand"], ispanya: ["spain"], fransa: ["france"], almanya: ["germany"], portekiz: ["portugal"],
+  kongo: ["congo"], etiyopya: ["ethiopia"], papua: ["papua"], afrika: ["africa"], avrupa: ["europe"], antarktika: ["antarctica"],
+  gronland: ["greenland"], pakistan: ["pakistan"], iran: ["iran"], irak: ["iraq"], suriye: ["syria"], misir: ["egypt"],
+});
+
+// Türkçe karakterler başlıklarla (İngilizce) karşılaştırma için sadeleştirilir
+function foldText(text) {
+  return String(text || "")
+    .toLocaleLowerCase("tr-TR")
+    .replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g")
+    .replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c");
+}
+
+function getTokens(foldedText) {
+  return foldedText.split(/[^a-z0-9]+/).filter((w) => w.length >= MIN_TOKEN_LENGTH);
+}
+
+// Sorudaki bilinen yer adları; her biri için başlıkta aranacak İngilizce karşılıklar
+function getMentionedPlaces(foldedPrompt) {
+  return Object.entries(PLACE_ALIASES)
+    .filter(([stem]) => new RegExp(`(^|[^a-z0-9])${stem}`).test(foldedPrompt))
+    .map(([, names]) => names);
+}
+
+/**
+ * Soruya uyan olayı seçer; soruda bilinen bir yer adı geçip hiçbir olaya uymuyorsa null döner.
+ * Yer/isim belirtilmemiş genel sorularda ("en son volkan") en güncel olay seçilir.
+ */
+export function selectFocusEvent(events, promptText) {
+  if (!Array.isArray(events) || events.length === 0) return null;
+  const folded = foldText(promptText);
+  // "şu an aktif" sorusunda sona ermiş olay gösterilmez (açık olay varsa)
+  const wantsActive = ACTIVE_HINTS.some((hint) => folded.includes(hint));
+  const openEvents = events.filter((e) => e?.status === "OPEN");
+  const pool = wantsActive && openEvents.length > 0 ? openEvents : events;
+
+  const places = getMentionedPlaces(folded);
+  if (places.length > 0) {
+    const inPlace = pool.find((e) => {
+      const haystack = foldText(`${e?.title || ""} ${e?.description || ""}`);
+      return places.some((names) => names.some((name) => haystack.includes(name)));
+    });
+    return inPlace || null;
+  }
+
+  // Soru kelimesi başlıktaki bir kelimeyle başlıyorsa ("Etna'nın" → "etna") o olay seçilir
+  const tokens = getTokens(folded);
+  const named = pool.find((e) => {
+    const titleWords = getTokens(foldText(`${e?.title || ""} ${e?.description || ""}`));
+    return tokens.some((tok) => titleWords.some((w) => tok.startsWith(w)));
+  });
+  return named || pool[0];
+}
+
+/**
+ * Gemini'ye aday olaylar, tüm telemetri verileri ve seçim kuralı verilir; konuşma metni ekranda seçilen olayla aynı olsun diye.
+ */
+export function createEarthEventContext(events, suggestedEvent) {
+  const candidates = (Array.isArray(events) ? events : []).slice(0, MAX_GEMINI_CANDIDATES).map((e) => ({
+    id: e.id,
+    title: e.title,
+    category: e.category,
+    category_title: e.category_title || "",
+    status: e.status,
+    timestamp_utc: e.timestamp_utc,
+    first_seen_utc: e.first_seen_utc || e.timestamp_utc || "",
+    latitude_deg: e.coordinates?.latitude_deg,
+    longitude_deg: e.coordinates?.longitude_deg,
+    magnitude_value: e.magnitude_value ?? null,
+    magnitude_unit: e.magnitude_unit || "",
+    depth_km: e.depth_km ?? null,
+    description: e.description || "",
+    source_id: e.source_id || "",
+    source_url: e.source_url || "",
+    eonet_url: e.eonet_url || "",
+    track_point_count: e.track_point_count || 1,
+  }));
+  return {
+    source: "NASA EONET v3 & USGS Sismik Telemetri",
+    total_candidate_count: candidates.length,
+    candidates,
+    suggested_focus_event_id: suggestedEvent?.id ?? NO_EVENT_MATCH_ID,
+    selection_rule:
+      "parameters.focus_event_id alanına kullanıcının sorduğu yer/isim/zamana GERÇEKTEN uyan adayın id'sini yaz. " +
+      `Hiçbir aday uymuyorsa (ör. sorulan ülkede kayıt yoksa) focus_event_id: "${NO_EVENT_MATCH_ID}" yaz ve speech_text'te ` +
+      "bu soruya uyan güncel bir kayıt bulunmadığını söyle; başka bir yerdeki olayı o yerdeymiş gibi anlatma. " +
+      "EŞLEŞEN OLAY VARSA ZORUNLU VERİ KURALI: Seçilen olayın (veya 'depremlerin tüm verilerini al' gibi genel/çoğul sorularda listedeki depremlerin) TÜM verilerini " +
+      "(büyüklük/şiddet magnitude_value ve magnitude_unit, derinlik depth_km, enlem latitude_deg ve boylam longitude_deg koordinatları, " +
+      "gerçekleşme tarihi/saati timestamp_utc, merkez üssü/bölge, durum status ve kaynak source_id) speech_text, parameters.description ve parameters.facts içinde EKSİKSİZ aktar. " +
+      "Deprem, sismograf veya deprem şiddeti sorularını ASLA reddetme ve ASLA 'sismograf verilerini veya deprem şiddetlerini takip edemem' deme.",
+  };
+}
+
+/**
+ * Gemini'nin seçimini doğrular: "NONE" → eşleşme yok, geçerli id → o olay, geçersiz/eksik → yerel seçim.
+ */
+export function resolveEarthEventChoice(events, geminiFocusId, localFocus) {
+  if (geminiFocusId === NO_EVENT_MATCH_ID) return null;
+  if (typeof geminiFocusId === "string" && geminiFocusId) {
+    const chosen = (events || []).find((e) => e?.id === geminiFocusId);
+    if (chosen) return chosen;
+  }
+  return localFocus ?? null;
+}
+
+/**
+ * Odak olay varsa listeyi ve küre sahnesini rotaya ekler. Yoksa küre açılmaz, hiçbir yer işaretlenmez;
+ * rota bilgi kartına döner ve konuşma metni boşsa noMatchText yazılır.
+ */
+export function attachEarthEventsToRoute(route, events, focusEvent, categoryId, noMatchText = "") {
+  if (!route || !route.parameters || !Array.isArray(events)) return route;
+  if (!focusEvent) {
+    delete route.parameters.events;
+    delete route.parameters.focus_event_id;
+    // Eşleşme yoksa başka bir yerin görseliyle "genel bilgi" penceresi de açılmaz (yanıltıcı olur)
+    delete route.parameters.is_general_question;
+    delete route.parameters.image_query;
+    if (route.parameters.model_url === "EARTH_EVENTS") delete route.parameters.model_url;
+    route.parameters.event_category = categoryId || "all";
+    route.template_id = "NONE";
+    if (route.action_type === "FOCUS_OBJECT" || route.action_type === "RESET_VIEW") route.action_type = "SHOW_FACT_CARD";
+    if (noMatchText && (route.parameters.data_source === "FALLBACK" || !route.speech_text)) {
+      route.speech_text = noMatchText;
+      route.tts_text = noMatchText;
+    }
+    return route;
+  }
+  const limited = events.slice(0, MAX_ROUTE_EVENTS);
+  if (!limited.includes(focusEvent)) limited.unshift(focusEvent);
+
+  route.parameters.events = limited;
+  route.parameters.event_category = categoryId || "all";
+  route.parameters.data_source = "NASA_EONET";
+  route.parameters.focus_event_id = focusEvent.id;
+  // Sözleşmede EARTH şablonu yok: şablon NONE kalır, sahne seçimi model_url ile yapılır
+  route.template_id = "NONE";
+  route.parameters.model_url = "EARTH_EVENTS";
+  route.action_type = "FOCUS_OBJECT";
+  return route;
+}
+
+// ============================================================================
+// DOSYA: src/services/intentDetector.js
+// ============================================================================
+// Kullanıcı girdisinden NASA/uzay veri niyetini algılar ve güvenli veri çeker
+
+import fs from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { fetchUniversalNasaPhoto, resolveNasaImageSearchConfig } from "./nasaPhotoFetcher.js";
+import { getFallbackSpaceData } from "./spaceDataFallback.js";
+import { hasKeyword } from "./keywordMatch.js";
+
+const PHOTO_INTENT_KEYWORDS = [
+  "foto", "görsel", "gorsel", "resim", "resmi",
+  "çektiği", "cektigi", "çekilen", "cekilen", "çekilmiş", "cekilmis", "ne çekti", "ne cekti",
+  "görüntü", "goruntu", "çekim", "cekim", "image", "photo",
+];
+
+const APOD_KEYWORDS = [
+  "apod", "günün uzay", "günün gök", "günün fotoğrafı", "günün resmi", "günün görseli",
+];
+
+const MARS_WEATHER_TARGETS = ["mars", "kızıl gezegen", "jezero"];
+const MARS_WEATHER_TERMS = [
+  "fırtına", "firtina", "hava durumu", "rüzgar", "ruzgar",
+  "toz", "basınç", "meteoroloji", "insight", "meda",
+];
+
+// Sıra önemli: "volkan patlaması" Güneş patlaması sanılmasın diye EONET, solar'dan önce bakılır
+const EONET_CATEGORY_KEYWORDS = [
+  { category: "volcanoes", keywords: ["volkan", "yanardağ", "yanardag", "lav akı", "püskür", "puskur"] },
+  { category: "earthquakes", keywords: ["deprem", "sismik", "sismograf", "sarsıntı", "sarsinti", "fay hatt", "merkez üssü", "merkez ussu", "richter", "artçı", "artci"] },
+  { category: "wildfires", keywords: ["yangın", "yangin", "orman yang"] },
+  { category: "severeStorms", keywords: ["kasırga", "kasirga", "tayfun", "siklon", "hortum", "fırtına", "firtina"] },
+  { category: "floods", keywords: ["taşkın", "taskin", "su baskın", "sel felak"] },
+  { category: "seaLakeIce", keywords: ["buzul", "buzdağ", "buzdag", "deniz buz", "göl buz"] },
+  { category: "snow", keywords: ["kar fırtına", "kar yağ", "çığ", "cig "] },
+  { category: "dustHaze", keywords: ["toz bulut", "kum fırtına", "duman"] },
+  { category: "drought", keywords: ["kuraklık", "kuraklik"] },
+  { category: "landslides", keywords: ["heyelan", "toprak kay"] },
+  { category: "tempExtremes", keywords: ["sıcak hava dalga", "aşırı sıcak", "soğuk hava dalga"] },
+];
+
+const EONET_GENERAL_KEYWORDS = ["afet", "eonet", "doğal olay", "dogal olay"];
+
+// Güneş/Mars bağlamındaki "fırtına" Dünya afeti değildir
+const NON_EARTH_CONTEXT = ["güneş", "gunes", "manyetik", "uzay hava", ...MARS_WEATHER_TARGETS];
+
+// "sel" kısa olduğu için "görsel", "kişisel" gibi kelimelerin içinde aranmaz, tam kelime olmalı
+function hasFloodWord(t) {
+  return t.split(/[\s.,!?;:]+/).some((w) => /^sel(ler|leri|de|den|i|in)?('.*)?$/.test(w));
+}
+
+function resolveEonetCategory(t) {
+  if (NON_EARTH_CONTEXT.some((kw) => hasKeyword(t, kw))) return null;
+  if (hasFloodWord(t)) return "floods";
+  const match = EONET_CATEGORY_KEYWORDS.find((entry) => entry.keywords.some((kw) => hasKeyword(t, kw)));
+  return match ? match.category : null;
+}
+
+function detectEonetIntent(t) {
+  const category = resolveEonetCategory(t);
+  if (!category && !EONET_GENERAL_KEYWORDS.some((kw) => hasKeyword(t, kw))) return null;
+  const cat = category || "all";
+  return {
+    queryType: "eonet",
+    identifier: cat,
+    categoryName: `NASA EONET Doğal Afetler [${cat.toUpperCase()}]`,
+  };
+}
+
+const CELESTIAL_OBJECT_ALIASES = [
+  { id: "jupiter", patterns: ["jüpiter", "jupiter"] },
+  { id: "saturn", patterns: ["satürn", "saturn"] },
+  { id: "uranus", patterns: ["uranüs", "uranus"] },
+  { id: "neptune", patterns: ["neptün", "neptune"] },
+  { id: "earth", patterns: ["dünya", "dunya", "earth"] },
+  { id: "venus", patterns: ["venüs", "venus"] },
+  { id: "mars", patterns: ["mars"] },
+  { id: "mercury", patterns: ["merkür", "merkur", "mercury"] },
+  { id: "sun", patterns: ["güneş", "gunes", "sun"] },
+  { id: "pluto", patterns: ["plüton", "pluton", "pluto"] },
+  { id: "moon", patterns: ["moon"], wordPatterns: ["ay"] },
+];
+
+function findMentionedCelestialObjects(lowerText) {
+  const found = [];
+  for (const entry of CELESTIAL_OBJECT_ALIASES) {
+    let matchedIndex = -1;
+    for (const pat of entry.patterns) {
+      const idx = lowerText.indexOf(pat);
+      if (idx !== -1 && (matchedIndex === -1 || idx < matchedIndex)) {
+        matchedIndex = idx;
+      }
+    }
+    if (matchedIndex === -1 && Array.isArray(entry.wordPatterns)) {
+      for (const w of entry.wordPatterns) {
+        const re = new RegExp(`(^|[^a-zçğıöşü0-9])(${w})([^a-zçğıöşü0-9]|$)`, "i");
+        const m = re.exec(lowerText);
+        if (m) {
+          matchedIndex = m.index + (m[1]?.length || 0);
+          break;
+        }
+      }
+    }
+    if (matchedIndex !== -1) {
+      found.push({ id: entry.id, index: matchedIndex });
+    }
+  }
+  found.sort((a, b) => a.index - b.index);
+  return found.map((item) => item.id);
+}
+
+export function resolveComparisonIdentifier(promptText) {
+  const lower = String(promptText || "").toLowerCase();
+  const objects = findMentionedCelestialObjects(lower);
+  if (objects.length >= 2) {
+    return `${objects[0]}_vs_${objects[1]}`;
+  }
+  if (objects.length === 1) {
+    const second = objects[0] === "earth" ? "mars" : "earth";
+    return `${objects[0]}_vs_${second}`;
+  }
+  return "earth_vs_mars";
+}
+
+function resolveHistoricalMissionId(t) {
+  if (t.includes("venera")) return "venera_7";
+  if (t.includes("perseverance") || t.includes("persevarence") || t.includes("persaverence")) return "perseverance";
+  if (t.includes("jwst") || t.includes("james webb")) return "jwst";
+  if (t.includes("hubble")) return "hubble";
+  return "apollo_11";
+}
+
+export function detectNasaQueryCategory(promptText) {
+  const t = String(promptText || "").toLowerCase().replace(/\u0307/g, "");
+
+  if (APOD_KEYWORDS.some((kw) => hasKeyword(t, kw))) {
+    return {
+      queryType: "apod",
+      identifier: "today",
+      categoryName: "NASA Astronomy Picture of the Day (APOD)",
+    };
+  }
+
+  // Afet sorusu "görüntü" kelimesi içerse de EONET'e gider; panel uydu görüntüsünü zaten gösterir
+  const eonetIntent = detectEonetIntent(t);
+  if (eonetIntent) return eonetIntent;
+
+  if (PHOTO_INTENT_KEYWORDS.some((kw) => hasKeyword(t, kw))) {
+    const cfg = resolveNasaImageSearchConfig(promptText);
+    return {
+      queryType: cfg.isMarsRover ? "mars_photos" : "universal_photo",
+      identifier: cfg.key,
+      categoryName: `NASA Resmi Görsel Arşivi [EN GÜNCEL: ${cfg.searchQuery.toUpperCase()}]`,
+    };
+  }
+
+  if (
+    MARS_WEATHER_TARGETS.some((kw) => hasKeyword(t, kw)) &&
+    MARS_WEATHER_TERMS.some((kw) => hasKeyword(t, kw))
+  ) {
+    return {
+      queryType: "mars_weather",
+      identifier: "storm",
+      categoryName: "NASA InSight & MEDA Mars Hava Durumu ve Fırtına API",
+    };
+  }
+
+  if (
+    ["patlama", "flare", "güneş fırtına", "güneş leke", "radyasyon", "noaa", "güneşte son durum", "guneste son durum"]
+      .some((kw) => hasKeyword(t, kw))
+  ) {
+    return {
+      queryType: "solar",
+      identifier: "latest",
+      categoryName: "NOAA/NASA Güneş Patlama & Leke İzleme",
+    };
+  }
+
+  if (/\b[iı]ss\b|uzay\s*[iı]stasyon|[iı]stasyon\s*nerede|space\s*station/.test(t)) {
+    return {
+      queryType: "iss",
+      identifier: "live",
+      categoryName: "NASA JPL Horizons Canlı ISS Yörüngesi",
+    };
+  }
+
+  if (["voyager", "parker", "new horizons", "juno", "horizons"].some((kw) => hasKeyword(t, kw))) {
+    const craft = t.includes("parker") ? "parker" : "voyager_1";
+    return {
+      queryType: "spacecraft",
+      identifier: craft,
+      categoryName: `NASA Derin Uzay Filosu [${craft.toUpperCase()}]`,
+    };
+  }
+
+  if (["asteroit", "asteroid", "neo", "çarpm", "göktaşı"].some((kw) => hasKeyword(t, kw))) {
+    return {
+      queryType: "neo",
+      identifier: "hazardous",
+      categoryName: "NASA NeoWs Asteroit Kataloğu",
+    };
+  }
+
+  if (
+    ["apollo", "venera", "armstrong", "iniş görev", "perseverance", "persevarence", "persaverence", "james webb", "jwst", "hubble"]
+      .some((kw) => hasKeyword(t, kw))
+  ) {
+    const id = resolveHistoricalMissionId(t);
+    return {
+      queryType: "mission",
+      identifier: id,
+      categoryName: `NASA Tarihi Görev & Teleskop Telemetrisi [${id.toUpperCase()}]`,
+    };
+  }
+
+  if (["karşılaştır", "kıyasla", "vs", "hangisi daha büyük", "farkı ne"].some((kw) => hasKeyword(t, kw))) {
+    const compId = resolveComparisonIdentifier(promptText);
+    return {
+      queryType: "comparison",
+      identifier: compId,
+      categoryName: `NASA Gezegen Karşılaştırma Kataloğu [${compId.toUpperCase()}]`,
+    };
+  }
+
+  return null;
+}
+
+export async function fetchSpaceDataSafe(queryType, identifier, rawPromptText = "", resultIndex = 0) {
+  const q = (queryType || "").toLowerCase();
+  const id = (identifier || "").toLowerCase();
+
+  if (["universal_photo", "mars_photos", "perseverance_photos", "rover_photos"].includes(q)) {
+    return await fetchUniversalNasaPhoto(rawPromptText || id, resultIndex);
+  }
+
+  // Taha'nın dataLayer sözleşmesi varsa öncelikli olarak oradan oku
+  try {
+    const dataLayerPath = fileURLToPath(new URL("../api/dataLayer.js", import.meta.url));
+    if (fs.existsSync(dataLayerPath)) {
+      const dataLayer = await import(pathToFileURL(dataLayerPath).href);
+      if (typeof dataLayer.getSpaceData === "function") {
+        const result = await dataLayer.getSpaceData(queryType, identifier);
+        const hasContent =
+          result !== null &&
+          result !== undefined &&
+          (Array.isArray(result) ? result.length > 0 : Object.keys(result).length > 0);
+        if (hasContent) return result;
+      }
+    }
+  } catch (err) {
+    console.warn("dataLayer.getSpaceData çağrısında yedek veriye düşüldü:", err.message);
+  }
+
+  return getFallbackSpaceData(queryType, identifier);
+}
+
+// ============================================================================
+// DOSYA: src/services/geminiPrompt.js
+// ============================================================================
+// Gemini sistem promptu üretimi, JSON temizleme ve çıktı doğrulama
+
+import {
+  DEFAULT_FALLBACK_SPEECH,
+  VALID_ACTION_TYPES,
+  VALID_TEMPLATE_IDS,
+  isNonEmptyString,
+  isPlainObject,
+} from "./geminiConstants.js";
+import { GENERAL_QUESTION_INSTRUCTION, RICH_CONTENT_INSTRUCTION, RICH_CONTENT_PARAM_KEYS, sanitizeRichContentParam } from "./richContent.js";
+import { formatDisplaySpeechText, formatTtsSpeechText } from "./speechTextCleaner.js";
+import { SCENE_TARGET_INSTRUCTION } from "./sceneIntentGuard.js";
+
+const ALLOWED_FIXED_PARAM_KEYS = new Set([
+  "primary_object",
+  "secondary_object",
+  "target_object",
+  "source",
+  "target",
+  "mode",
+  "mass_kg",
+  "height_m",
+  "speed_kms",
+  "data_source",
+  "nasa_id",
+  "title",
+  "photo_title",
+  "subject",
+  "camera",
+  "center",
+  "date_taken_utc",
+  "image_url",
+  "hd_image_url",
+  "first_nasa_id",
+  "first_title",
+  "first_date_taken_utc",
+  "first_image_url",
+  "first_hd_image_url",
+  "nasa_gallery_url",
+  "credit",
+  "sol",
+  "coordinates",
+  "flare_class",
+  "focus_event_id",
+  "query",
+]);
+
+const OBJECT_ID_PARAM_KEYS = new Set([
+  "primary_object",
+  "secondary_object",
+  "target_object",
+  "source",
+  "target",
+]);
+
+function toUpperSnakeIdentifier(val) {
+  return String(val || "")
+    .trim()
+    .replace(/[\s-]+/g, "_")
+    .toUpperCase();
+}
+
+export function getFallbackRoute(speechText = DEFAULT_FALLBACK_SPEECH, isStudentMode = false) {
+  const cleanDisplay = isNonEmptyString(speechText) ? formatDisplaySpeechText(speechText) : DEFAULT_FALLBACK_SPEECH;
+  const finalDisplay = cleanDisplay || DEFAULT_FALLBACK_SPEECH;
+  return {
+    action_type: "RESET_VIEW",
+    template_id: "NONE",
+    parameters: { data_source: "FALLBACK" },
+    speech_text: finalDisplay,
+    tts_text: formatTtsSpeechText("", finalDisplay),
+    is_student_mode: Boolean(isStudentMode),
+  };
+}
+
+export function createCleanedJsonString(rawText) {
+  if (!isNonEmptyString(rawText)) return "";
+  let cleaned = rawText.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```[a-zA-Z]*\n?/, "");
+    cleaned = cleaned.replace(/```$/, "");
+    cleaned = cleaned.trim();
+  }
+  return cleaned;
+}
+
+export function sanitizeGeminiOutput(rawOutput, fallbackStudentMode = false) {
+  if (!isPlainObject(rawOutput)) {
+    return getFallbackRoute(DEFAULT_FALLBACK_SPEECH, fallbackStudentMode);
+  }
+  if (!VALID_ACTION_TYPES.includes(rawOutput.action_type) || !VALID_TEMPLATE_IDS.includes(rawOutput.template_id)) {
+    return getFallbackRoute(
+      isNonEmptyString(rawOutput.speech_text) ? rawOutput.speech_text : DEFAULT_FALLBACK_SPEECH,
+      typeof rawOutput.is_student_mode === "boolean" ? rawOutput.is_student_mode : fallbackStudentMode
+    );
+  }
+
+  const cleanParams = {};
+  if (isPlainObject(rawOutput.parameters)) {
+    for (const [k, v] of Object.entries(rawOutput.parameters)) {
+      if (v === null || v === undefined || v === "") continue;
+      if (RICH_CONTENT_PARAM_KEYS.has(k)) {
+        const clean = sanitizeRichContentParam(k, v);
+        if (clean !== null) cleanParams[k] = clean;
+        continue;
+      }
+      if (!ALLOWED_FIXED_PARAM_KEYS.has(k)) continue;
+      cleanParams[k] = OBJECT_ID_PARAM_KEYS.has(k) && typeof v === "string" ? toUpperSnakeIdentifier(v) : v;
+    }
+  }
+  if (!isNonEmptyString(cleanParams.data_source)) {
+    cleanParams.data_source = "GEMINI";
+  }
+
+  // 1) Kullanıcının ekranda göreceği metin (speech_text): sayılar ve rakamlarla, linksiz
+  // 2) Ses API'sinin okuyarak sese çevireceği metin (tts_text): sayıların ve birimlerin Türkçe okunuşuyla, linksiz
+  const displaySpeechText = isNonEmptyString(rawOutput.speech_text)
+    ? formatDisplaySpeechText(rawOutput.speech_text)
+    : "";
+  const finalSpeechText = displaySpeechText || DEFAULT_FALLBACK_SPEECH;
+  const rawTtsCandidate = isNonEmptyString(rawOutput.tts_text)
+    ? rawOutput.tts_text
+    : isNonEmptyString(rawOutput.parameters?.tts_text)
+      ? rawOutput.parameters.tts_text
+      : "";
+  const finalTtsText = formatTtsSpeechText(rawTtsCandidate, finalSpeechText) || finalSpeechText;
+
+  return {
+    action_type: rawOutput.action_type,
+    template_id: rawOutput.template_id,
+    parameters: cleanParams,
+    speech_text: finalSpeechText,
+    tts_text: finalTtsText,
+    is_student_mode:
+      typeof rawOutput.is_student_mode === "boolean"
+        ? rawOutput.is_student_mode
+        : Boolean(fallbackStudentMode),
+  };
+}
+
+export function createSystemPrompt(isStudentMode = false, spaceDataContext = null, nowDate = new Date()) {
+  const nowIso = nowDate.toISOString();
+  const todayDate = nowIso.split("T")[0];
+
+  const modeInstruction = isStudentMode
+    ? "is_student_mode AKTİF: Karşındaki bir öğrenci. speech_text ve tts_text alanlarını sade, anlaşılır ve merak uyandırıcı şekilde KISA tut (yalnızca 1-2 cümle)."
+    : "is_student_mode PASİF (Genel Mod): speech_text ve tts_text alanlarını doğrudan konuya giren, net, bilimsel ve ÖZET bir dille KISA tut (yalnızca 1-2 cümle, gereksiz uzatma yapma).";
+
+  const ttsGrammarInstruction =
+    "ÇİFT METİN KURALI — KULLANICI METNİ (speech_text) VE SES API METNİ (tts_text) (ZORUNLU):\n" +
+    "Her yanıtta birbirinin karşılığı olan İKİ AYRI METİN üretmelisin:\n" +
+    "1. 'speech_text' (KULLANICININ EKRANDA GÖRECEĞİ METİN — RAKAMLARLA): Kullanıcının ekranda, bilgi panelinde ve altyazıda okuyacağı metindir. Tarihleri, saatleri, büyüklükleri, derinlikleri, mesafeleri ve tüm sayıları KESİNLİKLE RAKAMLARLA yaz (ASLA 'On beş Kasım iki bin yirmi altı' veya 'dört nokta dört' gibi yazıyla yazma).\n" +
+    "   Örnek speech_text: \"15 Kasım 2026 tarihinde, saat 09:24'te Endonezya'nın Ruteng bölgesinde 4.4 büyüklüğünde ve 10 km derinliğinde bir deprem meydana gelmiştir.\"\n" +
+    "2. 'tts_text' (SES API'SİNE VERİLECEK VE SESLENDİRİLECEK METİN — YAZIYLA / OKUNUŞUYLA): Yapay zekanın ses API'sine (TTS) vereceği ve ses API'sinin okuyarak sese çevireceği metindir. 'speech_text' ile aynı anlamı taşır ancak içindeki tüm sayılar, tarihler, saatler, ondalıklar ve kısaltmalar Türkçe okunuşuyla (yazıyla) yazılır ('km' yerine 'kilometre', 'sn' yerine 'saniye', '°C' yerine 'santigrat derece', 'JWST' yerine 'James Webb Uzay Teleskobu', '4.4' yerine 'dört nokta dört', '09:24'te' yerine 'sıfır dokuz yirmi dörtte', '15 Kasım 2026' yerine 'On beş Kasım iki bin yirmi altı').\n" +
+    "   Örnek tts_text: \"On beş Kasım iki bin yirmi altı tarihinde, saat sıfır dokuz yirmi dörtte Endonezya'nın Ruteng bölgesinde dört nokta dört büyüklüğünde ve on kilometre derinliğinde bir deprem meydana gelmiştir.\"\n" +
+    "3. ORTAK GRAMER VE LİNK YASAĞI:\n" +
+    "- Tamamen kurallı, akıcı ve doğal Türkçe cümle yapısı (Özne + Tümleç + Yüklem) kullan; devrik veya İngilizce'den çeviri kokan cümle kurma.\n" +
+    "- speech_text ve tts_text içinde KESİNLİKLE link (http, www), alan adı, resim/model dosyası adı (.jpg, .png, .glb), karmaşık dosya/ID kodları (PIA12110 vb.) veya köşeli parantezli etiket yazma. Linkler sadece parameters içinde durur.";
+
+  const dualPhotoNote = spaceDataContext?.first_image_url
+    ? "\n3. ÇİFT FOTOĞRAF KURALI (İLK VE SON): Kullanıcı hem ilk hem son fotoğrafı istedi. speech_text (rakamlarla) ve tts_text (okunuşuyla) içinde 2 kısa ve akıcı Türkçe cümleyle ilk ve son fotoğrafı özetle; link ekleme, görseller ekranda gösterilecek."
+    : "";
+
+  const dataInstruction = spaceDataContext
+    ? `\nNASA VERİTABANI VE TELEMETRİSİ (ÖNCELİKLİ KAYNAK):\n${JSON.stringify(spaceDataContext, null, 2)}\nBİLİMSEL CİDDİYET VE FOTOĞRAF/VERİ KURALI (ZORUNLU):\n1. Resmi NASA verisini speech_text ve tts_text anlatımında temel al ve data_source alanını 'NASA_API' olarak damgala.\n2. Fotoğraf/görsel yanıtlarında kendi yorumunu veya spekülasyonunu EKLEME; NASA verisindeki gerçek başlığı, tarihi, kamerayı/teleskobu ve açıklamayı aktar. Fotoğraf linkini speech_text veya tts_text'e YAZMA; görsel ekranda gösterilecek.${dualPhotoNote}`
+    : "\nKURAL: Bu soru canlı API gerektirmeyen genel bir bilimsel sorudur. Doğrudan kendi astronomi ve fizik bilgini kullanarak kesin, net ve bilimsel ciddiyetle yanıtla ve data_source alanını 'GEMINI' olarak damgala.";
+
+  return [
+    "Sen Aluma Güneş Sistemi ve Derin Uzay platformunun yapay zeka yönlendiricisisin.",
+    `GÜNCEL SİSTEM TARİHİ VE SAATİ (UTC): ${nowIso} (Bugünün tarihi: ${todayDate}). Zaman, yıl, "bugün" veya "en son" ifadelerinde DAİMA bu güncel tarihi esas al; geçmiş yılları (ör. 2017, 2023, 2024) güncel tarihmiş gibi sunma.`,
+    "Sadece geçerli bir JSON nesnesi döndür. Şema: { \"action_type\": \"...\", \"template_id\": \"...\", \"parameters\": { ... }, \"speech_text\": \"...\", \"tts_text\": \"...\", \"is_student_mode\": boolean }",
+    `İzin verilen template_id değerleri (BUNLARIN DIŞINDA DEĞER ÜRETME): ${VALID_TEMPLATE_IDS.join(", ")}`,
+    `İzin verilen action_type değerleri (BUNLARIN DIŞINDA DEĞER ÜRETME): ${VALID_ACTION_TYPES.join(", ")}`,
+    "SABİT PARAMETERS VE ŞABLON KURALLARI (ZORUNLU):",
+    "1. Sabit parameters Anahtarları: Gezegene göre değişen key (jupiter_radius_km, moon_gravity_ms2 vb.) ASLA üretme. Sadece sabit alan adları ('primary_object', 'secondary_object', 'target_object') ve UPPER_SNAKE hedef isimleri ('JUPITER', 'MOON', 'MARS', 'EARTH' vb.) dön. Varsa sadece kullanıcıdan gelen değişkenleri ekle: 'mode', 'mass_kg', 'height_m', 'speed_kms'.",
+    "2. Sayısal Sabitleri parameters İçine Yazma: Yarıçap, yerçekimi, kütle gibi sabitler spacePhysics.js ve dataLayer.js'ten gelecek; parameters içinde sadece niyet ve hedef ID'sini çıkar.",
+    "3. Sözleşme Eşleşmeleri: Karşılaştırma sorularında template_id: 'NONE' + action_type: 'SHOW_COMPARISON' dön. Yerçekimi/ağırlık/düşme sorularında template_id: 'GRAVITY_SIM' dön. Işık gecikmesi sorularında template_id: 'LIGHT_DELAY' dön. Fotoğraf/galeri gösteriminde template_id: 'NONE' + action_type: 'OPEN_POPUP' (veya 'SHOW_FACT_CARD') dön.",
+    RICH_CONTENT_INSTRUCTION,
+    GENERAL_QUESTION_INSTRUCTION,
+    SCENE_TARGET_INSTRUCTION,
+    "DİYALOG GEÇMİŞİ VE BAĞLAM HATIRLAMA:",
+    "Kullanıcının önceki mesajlarda bahsettiği cisimleri hatırla ve zamirler kullanıldığında bağlamı eksiksiz tamamla.",
+    dataInstruction,
+    modeInstruction,
+    ttsGrammarInstruction,
+    "SCOPE GUARD (MATEMATİK VE UZAY İÇERMEYEN ALAKASIZ SORULAR İÇİN ZORUNLU KURAL): Yemek tarifi (pankek, çorba vb.), spor/futbol/maç skoru (derbi kaç kaç biter vb.), şehirler arası yol tarifi ve dünyevi ulaşım (İstanbul'dan Ankara'ya nasıl gidilir vb.), borsa, siyaset, magazin gibi uzay, fizik ve matematik içermeyen alakasız konularda SORUYU KESİNLİKLE CEVAPLAMA (yol tarifi verme, yemek tarifi verme, tahmin yürütme). Bunun yerine:\n" +
+      "- action_type: 'SHOW_FACT_CARD', template_id: 'NONE' seç.\n" +
+      "- parameters içinde 'is_off_topic': true ve 'title': 'Kapsam Dışı İstek' gönder.\n" +
+      "- parameters içinde KESİNLİKLE image_query, image_url, is_general_question, facts, sections veya hedef cisim (target_object vb.) EKLEME (hiçbir resim koyulmayacak).\n" +
+      "- speech_text ve parameters.description alanlarında ALAYCI, İĞNELEYİCİ ve KESİN bir dille, milyarlarca ışık yılı ötedeki galaksileri ve derin uzayı incelemek için tasarlanmış bir uzay sistemine böyle alakasız bir soru sorulmasını tiye al ve bunu KESİNLİKLE YAPAMAYACAĞINI net bir şekilde söyle.\n" +
+      "- NOT: Dünya üzerindeki depremler (deprem şiddeti/büyüklüğü, derinliği, sismograf/sismik verileri, merkez üssü, fay hatları), volkan patlamaları, orman yangınları, fırtınalar ve tüm doğal afetler (NASA EONET & USGS) Aluma sisteminin DOĞRUDAN ANA ÖZELLİĞİDİR. Deprem veya sismik veri sorularında KESİNLİKLE 'anlık sismograf verilerini veya deprem şiddetlerini takip edemem ve bu tür dünyevi sorularınızı yanıtlayamam' DEME ve ASLA is_off_topic: true verme; verilen deprem/afet verilerinin tamamını (büyüklük Mw, derinlik km, koordinatlar, tarih/saat, merkez üssü, kaynak) eksiksiz aktar.\n" +
+      "- NOT 2: Genel matematik/fizik/okul ödevleri (karekök, formül, araba hız-yol problemi vb.) ve günlük sohbet/kişisel sorular ('naber', 'nasılsın', 'kendinden bahset', 'kişiliğin var mı' vb.) bu yasağa dahil DEĞİLDİR; onları normal ve yardımcı bir dille cevapla. Matematik/fizik sorularında konuyu destekleyen bir diyagram, grafik veya formül görseli uygunsa OPEN_POPUP + is_general_question: true + tam İngilizce kavram başlığıyla image_query kullanabilirsin; günlük sohbet/kişisel sorularda ise KESİNLİKLE resim (image_query / is_general_question) koyma ve SHOW_FACT_CARD kullan.",
+  ].join("\n");
+}
+
+// ============================================================================
+// DOSYA: src/services/geminiRouter.js
+// ============================================================================
+// Aluma Gemini Yönlendirici (Bölüm A - Mustafa)
+// Sözleşme: getRouteFromGemini(userInput) -> Promise<RouteJSON>
+
+import {
+  VALID_ACTION_TYPES,
+  VALID_TEMPLATE_IDS,
+  DEFAULT_FALLBACK_SPEECH,
+  isNonEmptyString,
+  isPlainObject,
+} from "./geminiConstants.js";
+import {
+  buildConversationContents,
+  clearConversationHistory as clearStoredHistory,
+  getConversationHistory,
+  recordTurnInHistory,
+} from "./geminiHistory.js";
+import {
+  clearShownPhotoHistory,
+  fetchUniversalNasaPhotoCandidates,
+  markPhotoAsShown,
+  resolveNasaImageSearchConfig,
+} from "./nasaPhotoFetcher.js";
+import { detectNasaQueryCategory, fetchSpaceDataSafe } from "./intentDetector.js";
+import { attachEarthEventsToRoute, createEarthEventContext, resolveEarthEventChoice, selectFocusEvent } from "./earthEventFocus.js";
+import eonetTexts from "../config/eonet_texts.json" with { type: "json" };
+import {
+  createCleanedJsonString,
+  createSystemPrompt,
+  getFallbackRoute,
+  sanitizeGeminiOutput,
+} from "./geminiPrompt.js";
+import {
+  createGeminiRouterConfig,
+  getGeminiRouterRuntimeInfo,
+  requestGeminiWithFailover,
+} from "./geminiClient.js";
+import { logRouteTelemetry } from "./geminiTelemetry.js";
+import { applyGeneralQuestionRoute, attachSupportingPhoto, enforceOffTopicRoute } from "./generalQuestion.js";
+import { applyTemplateIntentGuard } from "./sceneIntentGuard.js";
+import { hasKeyword } from "./keywordMatch.js";
+
+export function clearConversationHistory() {
+  clearStoredHistory();
+  clearShownPhotoHistory();
+}
+
+export {
+  VALID_TEMPLATE_IDS,
+  VALID_ACTION_TYPES,
+  isPlainObject,
+  isNonEmptyString,
+  createGeminiRouterConfig,
+  createCleanedJsonString,
+  sanitizeGeminiOutput,
+  createSystemPrompt,
+  detectNasaQueryCategory,
+  getConversationHistory,
+};
+
+function enrichWithNasaContext(sanitized, spaceDataContext, hasCustomClient, detectedCategory = null) {
+  if (detectedCategory?.queryType === "comparison") {
+    sanitized.action_type = "SHOW_COMPARISON";
+    sanitized.template_id = "NONE";
+    const parts = String(detectedCategory.identifier || "").split("_vs_");
+    if (parts.length === 2) {
+      if (!sanitized.parameters.primary_object) {
+        sanitized.parameters.primary_object = parts[0].toUpperCase();
+      }
+      if (!sanitized.parameters.secondary_object) {
+        sanitized.parameters.secondary_object = parts[1].toUpperCase();
+      }
+    }
+  }
+
+  // Asteroit listesi Güneş Sistemi sahnesindeki NEO sürüsüne doğrudan verilir
+  if (detectedCategory?.queryType === "neo" && Array.isArray(spaceDataContext)) {
+    sanitized.template_id = "NEO_SWARM";
+    sanitized.parameters.asteroids = spaceDataContext;
+    sanitized.parameters.query_mode = detectedCategory.mode || "replace";
+    sanitized.parameters.requested_count = spaceDataContext.length;
+  }
+
+  if (detectedCategory?.queryType === "iss") {
+    sanitized.parameters.target_object = "ISS";
+    sanitized.parameters.target = "ISS";
+    if (sanitized.action_type === "OPEN_POPUP" || sanitized.action_type === "RESET_VIEW") {
+      sanitized.action_type = "FOCUS_OBJECT";
+    }
+  }
+
+  if (!spaceDataContext) {
+    sanitized.parameters.data_source = "GEMINI";
+    return sanitized;
+  }
+
+  sanitized.parameters.data_source = "NASA_API";
+  if (hasCustomClient && !spaceDataContext.first_image_url) return sanitized;
+
+  const resolvedImg =
+    spaceDataContext.image_url ||
+    spaceDataContext.hd_image_url ||
+    spaceDataContext.hdurl ||
+    spaceDataContext.url;
+
+  if (resolvedImg) sanitized.parameters.image_url = resolvedImg;
+  if (spaceDataContext.hd_image_url) sanitized.parameters.hd_image_url = spaceDataContext.hd_image_url;
+  if (spaceDataContext.nasa_gallery_url) sanitized.parameters.nasa_gallery_url = spaceDataContext.nasa_gallery_url;
+  if (spaceDataContext.date_taken_utc) sanitized.parameters.date_taken_utc = spaceDataContext.date_taken_utc;
+  if (spaceDataContext.nasa_id) sanitized.parameters.nasa_id = spaceDataContext.nasa_id;
+  if (spaceDataContext.camera) sanitized.parameters.camera = spaceDataContext.camera;
+  if (spaceDataContext.title) {
+    sanitized.parameters.title = spaceDataContext.title;
+    sanitized.parameters.photo_title = spaceDataContext.title;
+  }
+  if (spaceDataContext.first_image_url) {
+    Object.assign(sanitized.parameters, {
+      first_nasa_id: spaceDataContext.first_nasa_id,
+      first_title: spaceDataContext.first_title,
+      first_date_taken_utc: spaceDataContext.first_date_taken_utc,
+      first_image_url: spaceDataContext.first_image_url,
+      first_hd_image_url: spaceDataContext.first_hd_image_url || spaceDataContext.first_image_url,
+    });
+  }
+  // Görsel linkleri sadece parameters içinde kalır; seslendirilen metne link veya dosya adı girmez
+  return sanitized;
+}
+
+async function selectVerifiedPhotoWithGemini(promptText, candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+  if (candidates.length === 1) {
+    markPhotoAsShown(candidates[0].nasa_id);
+    return candidates[0];
+  }
+
+  const summaryList = candidates.map((c, idx) => ({
+    index: idx,
+    nasa_id: c.nasa_id,
+    title: c.title,
+    date_taken_utc: c.date_taken_utc,
+    center: c.center,
+    description: c.description,
+  }));
+
+  const verifyPrompt =
+    "Sen bir NASA görsel doğrulayıcısısın. Kullanıcı sorusundaki teleskop/araç/cisim için verilen adayları kontrol et: 'Bunu gerçekten istenen cihaz/teleskop mu çekti?' Sadece { \"selected_index\": number } JSON döndür. En güncel ve uygun olanın indeksini yaz, hiçbiri uymuyorsa 0 yaz.";
+  const contents = [
+    {
+      role: "user",
+      parts: [{ text: `İstek: "${promptText}"\nAdaylar:\n${JSON.stringify(summaryList, null, 2)}` }],
+    },
+  ];
+
+  try {
+    const res = await requestGeminiWithFailover(contents, verifyPrompt);
+    const parsed = JSON.parse(createCleanedJsonString(res.text));
+    const idx = Number.isInteger(parsed?.selected_index) && parsed.selected_index >= 0 && parsed.selected_index < candidates.length
+      ? parsed.selected_index
+      : 0;
+    const chosen = candidates[idx];
+    markPhotoAsShown(chosen.nasa_id);
+    return chosen;
+  } catch (err) {
+    console.warn("Görsel doğrulama adımı atlandı, ilk aday seçiliyor:", err.message);
+    markPhotoAsShown(candidates[0].nasa_id);
+    return candidates[0];
+  }
+}
+
+function parseUserInput(userInput) {
+  if (typeof userInput === "string") {
+    return { promptText: userInput.trim(), explicitStudentMode: null };
+  }
+  if (isPlainObject(userInput)) {
+    return {
+      promptText: typeof userInput.text === "string" ? userInput.text.trim() : "",
+      explicitStudentMode: typeof userInput.is_student_mode === "boolean" ? userInput.is_student_mode : null,
+    };
+  }
+  return { promptText: "", explicitStudentMode: null };
+}
+
+// Sadece önceki fotoğrafa dönük açık takip sözleri. "göster/ver/aç" her komutta geçtiği ve parça aramasında
+// "uzay aracı"nın içinde bile eşleştiği için ipucu sayılmaz; yoksa yeni konu eski fotoğrafın devamı sanılıyordu.
+const FOLLOWUP_PHOTO_HINTS = [
+  "başka", "baska", "baka", "diğer", "diger", "farklı", "farkli", "bir tane", "bir sonraki", "sıradaki", "siradaki", "daha güncel",
+];
+
+// Önceki deprem/afet veya uzay verisi sorusunun devamı olan detay/veri takip ifadeleri ("kaç şiddetinde", "tüm verilerini al" vb.)
+const FOLLOWUP_DATA_HINTS = [
+  "kaç şiddet", "kac siddet", "şiddeti", "siddeti", "büyüklüğü", "buyuklugu", "büyüklük", "buyukluk",
+  "derinliği", "derinligi", "derinlik", "merkez üssü", "merkez ussu", "nerede oldu", "ne zaman oldu",
+  "saat kaçta", "saat kacta", "tüm verileri", "tum verileri", "bütün verileri", "butun verileri",
+  "detayları", "detaylari", "koordinat", "enlem", "boylam", "artçı", "artci", "hasar", "fay",
+];
+
+function resolveContextualPrompt(promptText) {
+  const current = detectNasaQueryCategory(promptText);
+  const lower = promptText.toLowerCase();
+  const isFollowupHint = FOLLOWUP_PHOTO_HINTS.some((h) => hasKeyword(lower, h));
+  const isDataFollowup = FOLLOWUP_DATA_HINTS.some((h) => hasKeyword(lower, h));
+  const wantsDifferent = ["başka", "baska", "baka", "diğer", "diger", "farklı", "farkli", "yeni", "sıradaki"].some((w) =>
+    hasKeyword(lower, w)
+  );
+
+  // Kullanıcı aynı soruda teleskop adını tekrar yazsa bile "başka/farklı" istiyorsa sonraki görsele geç
+  if (current && current.identifier !== "default") {
+    return { effectivePrompt: promptText, resultIndex: wantsDifferent ? 1 : 0 };
+  }
+  if (!current && !isFollowupHint && !isDataFollowup) {
+    return { effectivePrompt: promptText, resultIndex: 0 };
+  }
+
+  const history = getConversationHistory();
+  // Önceki yanıtlarda zaten görsel linki verildiyse yazım hatası olsa bile bir sonraki fotoğrafı seç
+  let followupOffset = isFollowupHint ? 1 : 0;
+
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    if (history[i].role === "user") {
+      const prevText = history[i].text;
+      const prevCat = detectNasaQueryCategory(prevText);
+      const prevPhotoCfg = resolveNasaImageSearchConfig(prevText);
+      if ((prevCat && prevCat.identifier !== "default") || prevPhotoCfg.key !== "default") {
+        const wasPhotoTurn = ["universal_photo", "mars_photos", "perseverance_photos", "rover_photos", "apod"].includes(prevCat?.queryType);
+        const index = wasPhotoTurn || wantsDifferent ? followupOffset : 0;
+        return { effectivePrompt: `${prevText} ${promptText}`, resultIndex: index };
+      }
+      followupOffset += 1;
+    }
+  }
+  return { effectivePrompt: promptText, resultIndex: 0 };
+}
+
+export async function getRouteFromGemini(userInput) {
+  const { promptText, explicitStudentMode } = parseUserInput(userInput);
+  if (!isNonEmptyString(promptText)) {
+    return getFallbackRoute("Lütfen uzay veya Güneş Sistemi hakkında bir komut söyleyin.", Boolean(explicitStudentMode));
+  }
+
+  const isStudentMode = explicitStudentMode !== null ? explicitStudentMode : /öğrenci|basit|çocuk|ödev/i.test(promptText);
+  const runtimeInfo = getGeminiRouterRuntimeInfo();
+  const { effectivePrompt, resultIndex } = resolveContextualPrompt(promptText);
+  const detectedCategory = detectNasaQueryCategory(effectivePrompt);
+
+  let spaceDataContext = null;
+  let earthEvents = null;
+  if (detectedCategory) {
+    const isPhoto = ["universal_photo", "mars_photos", "perseverance_photos", "rover_photos"].includes(detectedCategory.queryType);
+    spaceDataContext = isPhoto && !runtimeInfo.hasCustomClient
+      ? await selectVerifiedPhotoWithGemini(effectivePrompt, await fetchUniversalNasaPhotoCandidates(effectivePrompt, resultIndex, 10))
+      : await fetchSpaceDataSafe(detectedCategory.queryType, detectedCategory.identifier, effectivePrompt, resultIndex);
+  }
+
+  // EONET listesi Gemini başarısız olsa bile UI'ya gider, küre doğru yere yine odaklanır
+  let focusEvent = null;
+  if (detectedCategory?.queryType === "eonet" && Array.isArray(spaceDataContext)) {
+    earthEvents = spaceDataContext;
+    focusEvent = selectFocusEvent(earthEvents, effectivePrompt);
+    spaceDataContext = createEarthEventContext(earthEvents, focusEvent);
+  }
+  // Gemini cevap verdiyse seçimi o yapar ("NONE" = soruya uyan olay yok); vermediyse yerel seçim kullanılır
+  const withEarthEvents = (route, geminiFocusId = undefined) => {
+    if (!earthEvents) return route;
+    const chosen = resolveEarthEventChoice(earthEvents, geminiFocusId, focusEvent);
+    return attachEarthEventsToRoute(route, earthEvents, chosen, detectedCategory.identifier, eonetTexts.no_event_text);
+  };
+
+  try {
+    const contents = buildConversationContents(promptText, isStudentMode);
+    const sysPrompt = createSystemPrompt(isStudentMode, spaceDataContext);
+    const rawResult = await requestGeminiWithFailover(contents, sysPrompt);
+    let parsedJson = null;
+    try {
+      parsedJson = JSON.parse(createCleanedJsonString(rawResult.text));
+    } catch (parseErr) {
+      console.warn("Gemini JSON parse hatası, fallback dönülüyor:", parseErr.message);
+      return withEarthEvents(getFallbackRoute(DEFAULT_FALLBACK_SPEECH, isStudentMode));
+    }
+
+    const sanitized = applyTemplateIntentGuard(sanitizeGeminiOutput(parsedJson, isStudentMode), promptText);
+    if (detectedCategory) {
+      delete sanitized.parameters.is_off_topic;
+    }
+    if (!enforceOffTopicRoute(sanitized)) {
+      enrichWithNasaContext(sanitized, spaceDataContext, runtimeInfo.hasCustomClient, detectedCategory);
+      withEarthEvents(sanitized, sanitized.parameters.focus_event_id);
+      await applyGeneralQuestionRoute(sanitized, promptText);
+      await attachSupportingPhoto(sanitized);
+    }
+    recordTurnInHistory(promptText, sanitized.speech_text);
+    logRouteTelemetry({ promptText, detectedCategory, keyIndex: rawResult.keyIndex, routeResult: sanitized, modelName: runtimeInfo.modelName, silent: runtimeInfo.silentTelemetry });
+    return sanitized;
+  } catch (err) {
+    console.warn("getRouteFromGemini hatası, fallback dönülüyor:", err.message);
+    const fb = withEarthEvents(getFallbackRoute(DEFAULT_FALLBACK_SPEECH, isStudentMode));
+    logRouteTelemetry({ promptText, detectedCategory, keyIndex: -1, routeResult: fb, modelName: runtimeInfo.modelName, silent: runtimeInfo.silentTelemetry });
+    return fb;
+  }
+}

@@ -1,4 +1,5 @@
-/.gemini_history.json
-/mustafa_*
-/src/
-/tests/
+.env
+.gemini_history.json
+node_modules/
+
+.vercel
