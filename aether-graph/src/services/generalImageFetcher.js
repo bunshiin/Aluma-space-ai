@@ -8,7 +8,7 @@ const REQUEST_TIMEOUT_MS = 6000;
 const MAX_ORIGINAL_IMAGE_PX = 2400;
 const PREFERRED_THUMB_PX = 1280;
 // Wikimedia API kuralı: istemci kendini tanıtan bir User-Agent göndermeli
-const USER_AGENT = "AetherGraph/1.0 (egitim amacli uzay platformu)";
+const USER_AGENT = "Aluma/1.0 (egitim amacli uzay platformu)";
 const wikiSearchUrl = (lang, term) => `https://${lang}.wikipedia.org/w/rest.php/v1/search/page?q=${encodeURIComponent(term)}&limit=5`;
 const wikiSummaryUrl = (lang, key) => `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(key)}`;
 const NASA_IMAGES_SEARCH_URL = "https://images-api.nasa.gov/search";
@@ -27,10 +27,19 @@ function pickSummaryImage(summary) {
   return thumb ? thumb.replace(/\/\d+px-/, `/${PREFERRED_THUMB_PX}px-`) : original?.source || "";
 }
 
+function isListOrMetaPage(key = "") {
+  return /_listesi\b|^list_of_|_list_of_|_timeline_|_outline_|_index_of_/i.test(key);
+}
+
 async function findWikipediaImage(fetchFn, lang, term) {
   // Gemini terimi tam sayfa başlığı olmayabilir ("black hole accretion disk"); önce en iyi eşleşen sayfa aranır
   const search = await getJson(fetchFn, wikiSearchUrl(lang, term));
-  const page = Array.isArray(search?.pages) ? search.pages.find((p) => p?.key && p?.thumbnail) : null;
+  const pages = Array.isArray(search?.pages) ? search.pages : [];
+  // Liste veya fihrist sayfaları (örn. Uzay ajansları listesi) alakasız görsel (ISS vb.) taşıyabileceği için elenir
+  let page = pages.find((p) => p?.key && p?.thumbnail && !isListOrMetaPage(p.key));
+  if (!page && pages[0]?.key && !isListOrMetaPage(pages[0].key)) {
+    page = pages[0];
+  }
   if (!page) return null;
   const summary = await getJson(fetchFn, wikiSummaryUrl(lang, page.key));
   const image_url = pickSummaryImage(summary);
@@ -46,7 +55,15 @@ async function findWikipediaImage(fetchFn, lang, term) {
 async function findNasaImage(fetchFn, term) {
   const params = new URLSearchParams({ q: term, media_type: "image" });
   const json = await getJson(fetchFn, `${NASA_IMAGES_SEARCH_URL}?${params.toString()}`);
-  const item = Array.isArray(json?.collection?.items) ? json.collection.items.find((i) => i?.links?.[0]?.href && isRealPhotoItem(i)) : null;
+  const items = Array.isArray(json?.collection?.items) ? json.collection.items : [];
+  const isIssQuery = /\biss\b|international space station|uzay istasyon/i.test(term);
+  const item = items.find((i) => {
+    if (!i?.links?.[0]?.href || !isRealPhotoItem(i)) return false;
+    const title = String(i.data?.[0]?.title || "").toLowerCase();
+    // Kullanıcı ISS sormamışsa genel sorgularda (ajans, merkez vb.) ISS fotoğrafı dönmesini engelle
+    if (!isIssQuery && /\b(iss|international space station)\b/i.test(title)) return false;
+    return true;
+  });
   if (!item) return null;
   return {
     image_url: item.links[0].href,

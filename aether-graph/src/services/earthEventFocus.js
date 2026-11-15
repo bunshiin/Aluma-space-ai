@@ -54,35 +54,58 @@ export function selectFocusEvent(events, promptText) {
 
   const places = getMentionedPlaces(folded);
   if (places.length > 0) {
-    const inPlace = pool.find((e) => places.some((names) => names.some((name) => foldText(e?.title).includes(name))));
+    const inPlace = pool.find((e) => {
+      const haystack = foldText(`${e?.title || ""} ${e?.description || ""}`);
+      return places.some((names) => names.some((name) => haystack.includes(name)));
+    });
     return inPlace || null;
   }
 
   // Soru kelimesi başlıktaki bir kelimeyle başlıyorsa ("Etna'nın" → "etna") o olay seçilir
   const tokens = getTokens(folded);
   const named = pool.find((e) => {
-    const titleWords = getTokens(foldText(e?.title));
+    const titleWords = getTokens(foldText(`${e?.title || ""} ${e?.description || ""}`));
     return tokens.some((tok) => titleWords.some((w) => tok.startsWith(w)));
   });
   return named || pool[0];
 }
 
 /**
- * Gemini'ye aday olaylar ve seçim kuralı verilir; konuşma metni ekranda seçilen olayla aynı olsun diye.
+ * Gemini'ye aday olaylar, tüm telemetri verileri ve seçim kuralı verilir; konuşma metni ekranda seçilen olayla aynı olsun diye.
  */
 export function createEarthEventContext(events, suggestedEvent) {
   const candidates = (Array.isArray(events) ? events : []).slice(0, MAX_GEMINI_CANDIDATES).map((e) => ({
-    id: e.id, title: e.title, category: e.category, status: e.status, timestamp_utc: e.timestamp_utc,
-    latitude_deg: e.coordinates?.latitude_deg, longitude_deg: e.coordinates?.longitude_deg,
+    id: e.id,
+    title: e.title,
+    category: e.category,
+    category_title: e.category_title || "",
+    status: e.status,
+    timestamp_utc: e.timestamp_utc,
+    first_seen_utc: e.first_seen_utc || e.timestamp_utc || "",
+    latitude_deg: e.coordinates?.latitude_deg,
+    longitude_deg: e.coordinates?.longitude_deg,
+    magnitude_value: e.magnitude_value ?? null,
+    magnitude_unit: e.magnitude_unit || "",
+    depth_km: e.depth_km ?? null,
+    description: e.description || "",
+    source_id: e.source_id || "",
+    source_url: e.source_url || "",
+    eonet_url: e.eonet_url || "",
+    track_point_count: e.track_point_count || 1,
   }));
   return {
-    source: "NASA EONET v3",
+    source: "NASA EONET v3 & USGS Sismik Telemetri",
+    total_candidate_count: candidates.length,
     candidates,
     suggested_focus_event_id: suggestedEvent?.id ?? NO_EVENT_MATCH_ID,
     selection_rule:
       "parameters.focus_event_id alanına kullanıcının sorduğu yer/isim/zamana GERÇEKTEN uyan adayın id'sini yaz. " +
       `Hiçbir aday uymuyorsa (ör. sorulan ülkede kayıt yoksa) focus_event_id: "${NO_EVENT_MATCH_ID}" yaz ve speech_text'te ` +
-      "bu soruya uyan güncel bir kayıt bulunmadığını söyle; başka bir yerdeki olayı o yerdeymiş gibi anlatma.",
+      "bu soruya uyan güncel bir kayıt bulunmadığını söyle; başka bir yerdeki olayı o yerdeymiş gibi anlatma. " +
+      "EŞLEŞEN OLAY VARSA ZORUNLU VERİ KURALI: Seçilen olayın (veya 'depremlerin tüm verilerini al' gibi genel/çoğul sorularda listedeki depremlerin) TÜM verilerini " +
+      "(büyüklük/şiddet magnitude_value ve magnitude_unit, derinlik depth_km, enlem latitude_deg ve boylam longitude_deg koordinatları, " +
+      "gerçekleşme tarihi/saati timestamp_utc, merkez üssü/bölge, durum status ve kaynak source_id) speech_text, parameters.description ve parameters.facts içinde EKSİKSİZ aktar. " +
+      "Deprem, sismograf veya deprem şiddeti sorularını ASLA reddetme ve ASLA 'sismograf verilerini veya deprem şiddetlerini takip edemem' deme.",
   };
 }
 
@@ -114,7 +137,10 @@ export function attachEarthEventsToRoute(route, events, focusEvent, categoryId, 
     route.parameters.event_category = categoryId || "all";
     route.template_id = "NONE";
     if (route.action_type === "FOCUS_OBJECT" || route.action_type === "RESET_VIEW") route.action_type = "SHOW_FACT_CARD";
-    if (noMatchText && (route.parameters.data_source === "FALLBACK" || !route.speech_text)) route.speech_text = noMatchText;
+    if (noMatchText && (route.parameters.data_source === "FALLBACK" || !route.speech_text)) {
+      route.speech_text = noMatchText;
+      route.tts_text = noMatchText;
+    }
     return route;
   }
   const limited = events.slice(0, MAX_ROUTE_EVENTS);

@@ -153,7 +153,7 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
       return null;
     }
     subtitle.show(route.speech_text);
-    voice.speak(route.speech_text);
+    voice.speak(route.tts_text || route.speech_text);
     return result;
   };
 

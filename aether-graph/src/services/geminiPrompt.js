@@ -8,7 +8,7 @@ import {
   isPlainObject,
 } from "./geminiConstants.js";
 import { GENERAL_QUESTION_INSTRUCTION, RICH_CONTENT_INSTRUCTION, RICH_CONTENT_PARAM_KEYS, sanitizeRichContentParam } from "./richContent.js";
-import { removeLinksAndFiles } from "./speechTextCleaner.js";
+import { formatDisplaySpeechText, formatTtsSpeechText } from "./speechTextCleaner.js";
 import { SCENE_TARGET_INSTRUCTION } from "./sceneIntentGuard.js";
 
 const ALLOWED_FIXED_PARAM_KEYS = new Set([
@@ -61,11 +61,14 @@ function toUpperSnakeIdentifier(val) {
 }
 
 export function getFallbackRoute(speechText = DEFAULT_FALLBACK_SPEECH, isStudentMode = false) {
+  const cleanDisplay = isNonEmptyString(speechText) ? formatDisplaySpeechText(speechText) : DEFAULT_FALLBACK_SPEECH;
+  const finalDisplay = cleanDisplay || DEFAULT_FALLBACK_SPEECH;
   return {
     action_type: "RESET_VIEW",
     template_id: "NONE",
     parameters: { data_source: "FALLBACK" },
-    speech_text: isNonEmptyString(speechText) ? speechText.trim() : DEFAULT_FALLBACK_SPEECH,
+    speech_text: finalDisplay,
+    tts_text: formatTtsSpeechText("", finalDisplay),
     is_student_mode: Boolean(isStudentMode),
   };
 }
@@ -109,13 +112,25 @@ export function sanitizeGeminiOutput(rawOutput, fallbackStudentMode = false) {
     cleanParams.data_source = "GEMINI";
   }
 
-  // Seslendirilecek metne link, görsel/model dosyası veya arşiv kimliği asla girmez
-  const speechText = isNonEmptyString(rawOutput.speech_text) ? removeLinksAndFiles(rawOutput.speech_text) : "";
+  // 1) Kullanıcının ekranda göreceği metin (speech_text): sayılar ve rakamlarla, linksiz
+  // 2) Ses API'sinin okuyarak sese çevireceği metin (tts_text): sayıların ve birimlerin Türkçe okunuşuyla, linksiz
+  const displaySpeechText = isNonEmptyString(rawOutput.speech_text)
+    ? formatDisplaySpeechText(rawOutput.speech_text)
+    : "";
+  const finalSpeechText = displaySpeechText || DEFAULT_FALLBACK_SPEECH;
+  const rawTtsCandidate = isNonEmptyString(rawOutput.tts_text)
+    ? rawOutput.tts_text
+    : isNonEmptyString(rawOutput.parameters?.tts_text)
+      ? rawOutput.parameters.tts_text
+      : "";
+  const finalTtsText = formatTtsSpeechText(rawTtsCandidate, finalSpeechText) || finalSpeechText;
+
   return {
     action_type: rawOutput.action_type,
     template_id: rawOutput.template_id,
     parameters: cleanParams,
-    speech_text: speechText || DEFAULT_FALLBACK_SPEECH,
+    speech_text: finalSpeechText,
+    tts_text: finalTtsText,
     is_student_mode:
       typeof rawOutput.is_student_mode === "boolean"
         ? rawOutput.is_student_mode
@@ -128,29 +143,32 @@ export function createSystemPrompt(isStudentMode = false, spaceDataContext = nul
   const todayDate = nowIso.split("T")[0];
 
   const modeInstruction = isStudentMode
-    ? "is_student_mode AKTİF: Karşındaki bir öğrenci. speech_text alanını sade, anlaşılır ve merak uyandırıcı şekilde KISA tut (yalnızca 1-2 cümle). parameters.description ve sections metinlerini de ortaokul öğrencisinin anlayacağı yumuşak, sade bir dille yaz (zor terimleri kısaca açıkla); cevap öğrencinin ödevine eklenebilir."
-    : "is_student_mode PASİF (Genel Mod): speech_text alanını doğrudan konuya giren, net, bilimsel ve ÖZET bir dille KISA tut (yalnızca 1-2 cümle, gereksiz uzatma yapma).";
+    ? "is_student_mode AKTİF: Karşındaki bir öğrenci. speech_text ve tts_text alanlarını sade, anlaşılır ve merak uyandırıcı şekilde KISA tut (yalnızca 1-2 cümle)."
+    : "is_student_mode PASİF (Genel Mod): speech_text ve tts_text alanlarını doğrudan konuya giren, net, bilimsel ve ÖZET bir dille KISA tut (yalnızca 1-2 cümle, gereksiz uzatma yapma).";
 
   const ttsGrammarInstruction =
-    "SESLENDİRME (TTS) VE TÜRKÇE GRAMER KURALI (ZORUNLU): speech_text doğrudan Türkçe sesli okuma motoru tarafından okunacaktır. Bu yüzden:\n" +
+    "ÇİFT METİN KURALI — KULLANICI METNİ (speech_text) VE SES API METNİ (tts_text) (ZORUNLU):\n" +
+    "Her yanıtta birbirinin karşılığı olan İKİ AYRI METİN üretmelisin:\n" +
+    "1. 'speech_text' (KULLANICININ EKRANDA GÖRECEĞİ METİN — RAKAMLARLA): Kullanıcının ekranda, bilgi panelinde ve altyazıda okuyacağı metindir. Tarihleri, saatleri, büyüklükleri, derinlikleri, mesafeleri ve tüm sayıları KESİNLİKLE RAKAMLARLA yaz (ASLA 'On beş Kasım iki bin yirmi altı' veya 'dört nokta dört' gibi yazıyla yazma).\n" +
+    "   Örnek speech_text: \"15 Kasım 2026 tarihinde, saat 09:24'te Endonezya'nın Ruteng bölgesinde 4.4 büyüklüğünde ve 10 km derinliğinde bir deprem meydana gelmiştir.\"\n" +
+    "2. 'tts_text' (SES API'SİNE VERİLECEK VE SESLENDİRİLECEK METİN — YAZIYLA / OKUNUŞUYLA): Yapay zekanın ses API'sine (TTS) vereceği ve ses API'sinin okuyarak sese çevireceği metindir. 'speech_text' ile aynı anlamı taşır ancak içindeki tüm sayılar, tarihler, saatler, ondalıklar ve kısaltmalar Türkçe okunuşuyla (yazıyla) yazılır ('km' yerine 'kilometre', 'sn' yerine 'saniye', '°C' yerine 'santigrat derece', 'JWST' yerine 'James Webb Uzay Teleskobu', '4.4' yerine 'dört nokta dört', '09:24'te' yerine 'sıfır dokuz yirmi dörtte', '15 Kasım 2026' yerine 'On beş Kasım iki bin yirmi altı').\n" +
+    "   Örnek tts_text: \"On beş Kasım iki bin yirmi altı tarihinde, saat sıfır dokuz yirmi dörtte Endonezya'nın Ruteng bölgesinde dört nokta dört büyüklüğünde ve on kilometre derinliğinde bir deprem meydana gelmiştir.\"\n" +
+    "3. ORTAK GRAMER VE LİNK YASAĞI:\n" +
     "- Tamamen kurallı, akıcı ve doğal Türkçe cümle yapısı (Özne + Tümleç + Yüklem) kullan; devrik veya İngilizce'den çeviri kokan cümle kurma.\n" +
-    "- Tarihleri cümle içinde ASLA '1996-01-15T18:46:16Z' gibi ham ISO koduyla yazma; '15 Ocak 1996 tarihinde' şeklinde Türkçe okunuşuyla yaz.\n" +
-    "- Kısaltmaları ve sembolleri okunuşuyla yaz ('km' yerine 'kilometre', 'sn' yerine 'saniye', '°C' yerine 'santigrat derece', 'JWST' yerine 'James Webb Uzay Teleskobu').\n" +
-    "- Cümle içinde parantez içi İngilizce terimler veya karmaşık dosya/ID kodları (PIA12110 vb.) kullanma; seslendirmenin tane tane ve doğal duraksamalarla okunması için uygun yerlerde virgül kullan.\n" +
-    "- speech_text içinde KESİNLİKLE link (http, www), alan adı, resim/model dosyası adı (.jpg, .png, .glb) veya köşeli parantezli etiket yazma. Linkler sadece parameters içinde durur.";
+    "- speech_text ve tts_text içinde KESİNLİKLE link (http, www), alan adı, resim/model dosyası adı (.jpg, .png, .glb), karmaşık dosya/ID kodları (PIA12110 vb.) veya köşeli parantezli etiket yazma. Linkler sadece parameters içinde durur.";
 
   const dualPhotoNote = spaceDataContext?.first_image_url
-    ? "\n3. ÇİFT FOTOĞRAF KURALI (İLK VE SON): Kullanıcı hem ilk hem son fotoğrafı istedi. speech_text içinde 2 kısa ve akıcı Türkçe cümleyle ilk ve son fotoğrafı özetle; link ekleme, görseller ekranda gösterilecek."
+    ? "\n3. ÇİFT FOTOĞRAF KURALI (İLK VE SON): Kullanıcı hem ilk hem son fotoğrafı istedi. speech_text (rakamlarla) ve tts_text (okunuşuyla) içinde 2 kısa ve akıcı Türkçe cümleyle ilk ve son fotoğrafı özetle; link ekleme, görseller ekranda gösterilecek."
     : "";
 
   const dataInstruction = spaceDataContext
-    ? `\nNASA VERİTABANI VE TELEMETRİSİ (ÖNCELİKLİ KAYNAK):\n${JSON.stringify(spaceDataContext, null, 2)}\nBİLİMSEL CİDDİYET VE FOTOĞRAF/VERİ KURALI (ZORUNLU):\n1. Resmi NASA verisini speech_text anlatımında temel al ve data_source alanını 'NASA_API' olarak damgala.\n2. Fotoğraf/görsel yanıtlarında kendi yorumunu veya spekülasyonunu EKLEME; NASA verisindeki gerçek başlığı, tarihi, kamerayı/teleskobu ve açıklamayı aktar. Fotoğraf linkini speech_text'e YAZMA; görsel ekranda gösterilecek.${dualPhotoNote}`
+    ? `\nNASA VERİTABANI VE TELEMETRİSİ (ÖNCELİKLİ KAYNAK):\n${JSON.stringify(spaceDataContext, null, 2)}\nBİLİMSEL CİDDİYET VE FOTOĞRAF/VERİ KURALI (ZORUNLU):\n1. Resmi NASA verisini speech_text ve tts_text anlatımında temel al ve data_source alanını 'NASA_API' olarak damgala.\n2. Fotoğraf/görsel yanıtlarında kendi yorumunu veya spekülasyonunu EKLEME; NASA verisindeki gerçek başlığı, tarihi, kamerayı/teleskobu ve açıklamayı aktar. Fotoğraf linkini speech_text veya tts_text'e YAZMA; görsel ekranda gösterilecek.${dualPhotoNote}`
     : "\nKURAL: Bu soru canlı API gerektirmeyen genel bir bilimsel sorudur. Doğrudan kendi astronomi ve fizik bilgini kullanarak kesin, net ve bilimsel ciddiyetle yanıtla ve data_source alanını 'GEMINI' olarak damgala.";
 
   return [
-    "Sen AETHER-GRAPH Güneş Sistemi ve Derin Uzay platformunun yapay zeka yönlendiricisisin.",
+    "Sen Aluma Güneş Sistemi ve Derin Uzay platformunun yapay zeka yönlendiricisisin.",
     `GÜNCEL SİSTEM TARİHİ VE SAATİ (UTC): ${nowIso} (Bugünün tarihi: ${todayDate}). Zaman, yıl, "bugün" veya "en son" ifadelerinde DAİMA bu güncel tarihi esas al; geçmiş yılları (ör. 2017, 2023, 2024) güncel tarihmiş gibi sunma.`,
-    "Sadece geçerli bir JSON nesnesi döndür. Şema: { \"action_type\": \"...\", \"template_id\": \"...\", \"parameters\": { ... }, \"speech_text\": \"...\", \"is_student_mode\": boolean }",
+    "Sadece geçerli bir JSON nesnesi döndür. Şema: { \"action_type\": \"...\", \"template_id\": \"...\", \"parameters\": { ... }, \"speech_text\": \"...\", \"tts_text\": \"...\", \"is_student_mode\": boolean }",
     `İzin verilen template_id değerleri (BUNLARIN DIŞINDA DEĞER ÜRETME): ${VALID_TEMPLATE_IDS.join(", ")}`,
     `İzin verilen action_type değerleri (BUNLARIN DIŞINDA DEĞER ÜRETME): ${VALID_ACTION_TYPES.join(", ")}`,
     "SABİT PARAMETERS VE ŞABLON KURALLARI (ZORUNLU):",
@@ -165,6 +183,12 @@ export function createSystemPrompt(isStudentMode = false, spaceDataContext = nul
     dataInstruction,
     modeInstruction,
     ttsGrammarInstruction,
-    "SCOPE GUARD (YALNIZCA ALAKASIZ SORULAR İÇİN): SADECE uzay, astronomi, gezegenler, doğal olaylar ve fizikle HİÇBİR ALAKASI OLMAYAN konularda (maç sonucu, yemek tarifi, borsa gibi) template_id 'NONE', action_type 'SHOW_FACT_CARD' seç ve konumuzun uzay olduğunu esprili bir dille hatırlat.",
+    "SCOPE GUARD (MATEMATİK VE UZAY İÇERMEYEN ALAKASIZ SORULAR İÇİN ZORUNLU KURAL): Yemek tarifi (pankek, çorba vb.), spor/futbol/maç skoru (derbi kaç kaç biter vb.), şehirler arası yol tarifi ve dünyevi ulaşım (İstanbul'dan Ankara'ya nasıl gidilir vb.), borsa, siyaset, magazin gibi uzay, fizik ve matematik içermeyen alakasız konularda SORUYU KESİNLİKLE CEVAPLAMA (yol tarifi verme, yemek tarifi verme, tahmin yürütme). Bunun yerine:\n" +
+      "- action_type: 'SHOW_FACT_CARD', template_id: 'NONE' seç.\n" +
+      "- parameters içinde 'is_off_topic': true ve 'title': 'Kapsam Dışı İstek' gönder.\n" +
+      "- parameters içinde KESİNLİKLE image_query, image_url, is_general_question, facts, sections veya hedef cisim (target_object vb.) EKLEME (hiçbir resim koyulmayacak).\n" +
+      "- speech_text ve parameters.description alanlarında ALAYCI, İĞNELEYİCİ ve KESİN bir dille, milyarlarca ışık yılı ötedeki galaksileri ve derin uzayı incelemek için tasarlanmış bir uzay sistemine böyle alakasız bir soru sorulmasını tiye al ve bunu KESİNLİKLE YAPAMAYACAĞINI net bir şekilde söyle.\n" +
+      "- NOT: Dünya üzerindeki depremler (deprem şiddeti/büyüklüğü, derinliği, sismograf/sismik verileri, merkez üssü, fay hatları), volkan patlamaları, orman yangınları, fırtınalar ve tüm doğal afetler (NASA EONET & USGS) Aluma sisteminin DOĞRUDAN ANA ÖZELLİĞİDİR. Deprem veya sismik veri sorularında KESİNLİKLE 'anlık sismograf verilerini veya deprem şiddetlerini takip edemem ve bu tür dünyevi sorularınızı yanıtlayamam' DEME ve ASLA is_off_topic: true verme; verilen deprem/afet verilerinin tamamını (büyüklük Mw, derinlik km, koordinatlar, tarih/saat, merkez üssü, kaynak) eksiksiz aktar.\n" +
+      "- NOT 2: Genel matematik/fizik/okul ödevleri (karekök, formül, araba hız-yol problemi vb.) ve günlük sohbet/kişisel sorular ('naber', 'nasılsın', 'kendinden bahset', 'kişiliğin var mı' vb.) bu yasağa dahil DEĞİLDİR; onları normal ve yardımcı bir dille cevapla. Matematik/fizik sorularında konuyu destekleyen bir diyagram, grafik veya formül görseli uygunsa OPEN_POPUP + is_general_question: true + tam İngilizce kavram başlığıyla image_query kullanabilirsin; günlük sohbet/kişisel sorularda ise KESİNLİKLE resim (image_query / is_general_question) koyma ve SHOW_FACT_CARD kullan.",
   ].join("\n");
 }

@@ -3,7 +3,7 @@
 export function logRouteTelemetry({ promptText, detectedCategory, keyIndex, routeResult, modelName, silent }) {
   if (silent) return;
   console.log("┌──────────────────────────────────────────────────────────────────────────┐");
-  console.log("│                 AETHER-GRAPH YÖNLENDİRİCİ TELEMETRİ LOGU                 │");
+  console.log("│                     ALUMA YÖNLENDİRİCİ TELEMETRİ LOGU                    │");
   console.log("├──────────────────────────────────────────────────────────────────────────┤");
   console.log("│ [1] DEĞİŞKENLER (VARIABLES):                                             │");
   console.log(`│   • Kullanıcı Sorusu  : ${promptText}`);
@@ -22,11 +22,16 @@ export function logRouteTelemetry({ promptText, detectedCategory, keyIndex, rout
     console.log(`│   • ${k.padEnd(18)}: ${formattedVal}`);
   }
   console.log("├──────────────────────────────────────────────────────────────────────────┤");
-  console.log("│ [4] SESLENDİRME METNİ (SPEECH_TEXT):                                     │");
+  console.log("│ [4A] KULLANICI METNİ (SPEECH_TEXT - EKRAN):                              │");
   console.log(`│   "${routeResult.speech_text}"`);
+  if (routeResult.tts_text) {
+    console.log("├──────────────────────────────────────────────────────────────────────────┤");
+    console.log("│ [4B] SES API METNİ (TTS_TEXT - SESLENDİRME):                             │");
+    console.log(`│   "${routeResult.tts_text}"`);
+  }
   console.log("├──────────────────────────────────────────────────────────────────────────┤");
   console.log("│ [5] ÇIKTI ŞABLONU (OUTPUT JSON):                                         │");
-  const { speech_text: _omittedSpeech, ...templateWithoutSpeech } = routeResult;
+  const { speech_text: _omittedSpeech, tts_text: _omittedTts, ...templateWithoutSpeech } = routeResult;
   const jsonLines = JSON.stringify(templateWithoutSpeech, null, 2).split("\n");
   for (const line of jsonLines) {
     console.log(`│   ${line}`);

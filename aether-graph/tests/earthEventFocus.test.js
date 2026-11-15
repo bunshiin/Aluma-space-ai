@@ -36,10 +36,29 @@ describe("earthEventFocus", () => {
     assert.equal(selectFocusEvent(EVENTS, "Avustralya orman yangını").id, "A");
   });
 
-  it("Gemini bağlamı aday listesi, öneri ve NONE seçim kuralını içerir", () => {
-    const ctx = createEarthEventContext(EVENTS, EVENTS[1]);
-    assert.deepEqual(ctx.candidates.map((c) => c.id), ["A", "B", "C"]);
-    assert.equal(ctx.suggested_focus_event_id, "B");
+  it("Gemini bağlamı aday listesi, tüm deprem/olay verileri, öneri ve NONE seçim kuralını içerir", () => {
+    const eqEvents = [
+      {
+        id: "EQ_1",
+        title: "Türkiye - Ege Sismik Hareketi",
+        category: "earthquakes",
+        status: "OPEN",
+        timestamp_utc: "2026-11-14T14:45:00Z",
+        coordinates: { latitude_deg: 36.85, longitude_deg: 27.42 },
+        magnitude_value: 5.8,
+        magnitude_unit: "Mw",
+        depth_km: 12.5,
+        description: "Muğla - Datça açıkları",
+        source_id: "USGS",
+      },
+    ];
+    const ctx = createEarthEventContext(eqEvents, eqEvents[0]);
+    assert.deepEqual(ctx.candidates.map((c) => c.id), ["EQ_1"]);
+    assert.equal(ctx.candidates[0].magnitude_value, 5.8);
+    assert.equal(ctx.candidates[0].magnitude_unit, "Mw");
+    assert.equal(ctx.candidates[0].depth_km, 12.5);
+    assert.equal(ctx.candidates[0].description, "Muğla - Datça açıkları");
+    assert.equal(ctx.suggested_focus_event_id, "EQ_1");
     assert.ok(ctx.selection_rule.includes("NONE"));
     assert.equal(createEarthEventContext(EVENTS, null).suggested_focus_event_id, "NONE");
   });

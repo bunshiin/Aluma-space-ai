@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { applyGeneralQuestionRoute, attachSupportingPhoto } from "../src/services/generalQuestion.js";
+import { applyGeneralQuestionRoute, attachSupportingPhoto, enforceOffTopicRoute } from "../src/services/generalQuestion.js";
 import { fetchGeneralTopicImage } from "../src/services/generalImageFetcher.js";
 
 const json = (body, ok = true) => ({ ok, json: async () => body });
@@ -34,7 +34,7 @@ describe("genel soru niyeti", () => {
     // Terim tam başlık olmayabilir: önce arama, sonra bulunan sayfanın özeti
     assert.ok(urls[0].startsWith("https://en.wikipedia.org/w/rest.php/v1/search/page?q=black%20hole"));
     assert.equal(urls[1], "https://en.wikipedia.org/api/rest_v1/page/summary/Black_hole");
-    assert.ok(headers.every((ua) => typeof ua === "string" && ua.startsWith("AetherGraph/")));
+    assert.ok(headers.every((ua) => typeof ua === "string" && ua.startsWith("Aluma/")));
   });
 
   it("özgün görsel çok büyükse küçük resim 1280 piksele büyütülerek kullanılır", async () => {
@@ -117,5 +117,34 @@ describe("destekleyici fotoğraf (odakla birlikte)", () => {
     const route = { action_type: "FOCUS_OBJECT", template_id: "NONE", parameters: { image_query: "yok" } };
     await attachSupportingPhoto(route, async () => json({}, false));
     assert.equal("image_url" in route.parameters, false);
+  });
+
+  it("alakasız (is_off_topic) sorularda tüm görsel ve genel soru alanları temizlenir, SHOW_FACT_CARD olur", async () => {
+    const route = {
+      action_type: "OPEN_POPUP",
+      template_id: "NONE",
+      parameters: {
+        is_off_topic: true,
+        is_general_question: true,
+        image_query: "pancake recipe",
+        image_url: "https://upload.wikimedia.org/p.jpg",
+        facts: [{ label: "A", value: "B" }],
+        sections: [{ heading: "H", body: "B" }],
+        title: "Kapsam Dışı İstek",
+        description: "Bunu kesinlikle yapamam.",
+      },
+      speech_text: "Bunu kesinlikle yapamam.",
+    };
+    assert.equal(enforceOffTopicRoute(route), true);
+    await applyGeneralQuestionRoute(route, "pankek tarifi", async () => assert.fail("istek atılmamalı"));
+    await attachSupportingPhoto(route, async () => assert.fail("istek atılmamalı"));
+    assert.equal(route.action_type, "SHOW_FACT_CARD");
+    assert.equal(route.template_id, "NONE");
+    assert.equal(route.parameters.is_off_topic, true);
+    assert.equal("image_url" in route.parameters, false);
+    assert.equal("image_query" in route.parameters, false);
+    assert.equal("is_general_question" in route.parameters, false);
+    assert.equal("facts" in route.parameters, false);
+    assert.equal("sections" in route.parameters, false);
   });
 });

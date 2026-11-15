@@ -182,7 +182,8 @@ export function handleActionRouter(json) {
   }
   hudController.renderStatus(rawAction, speechText);
   if (speechText) {
-    routerConfig.onSpeechText?.(speechText);
+    const ttsToSpeak = typeof json.tts_text === "string" && json.tts_text.trim() ? json.tts_text : speechText;
+    routerConfig.onSpeechText?.(ttsToSpeak);
   }
 
   const routePayload = {

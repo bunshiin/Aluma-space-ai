@@ -1,3 +1,5 @@
 .env
 .gemini_history.json
 node_modules/
+
+.vercel

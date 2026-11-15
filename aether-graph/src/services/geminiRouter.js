@@ -1,4 +1,4 @@
-// AETHER-GRAPH Gemini Yönlendirici (Bölüm A - Mustafa)
+// Aluma Gemini Yönlendirici (Bölüm A - Mustafa)
 // Sözleşme: getRouteFromGemini(userInput) -> Promise<RouteJSON>
 
 import {
@@ -35,7 +35,7 @@ import {
   requestGeminiWithFailover,
 } from "./geminiClient.js";
 import { logRouteTelemetry } from "./geminiTelemetry.js";
-import { applyGeneralQuestionRoute, attachSupportingPhoto } from "./generalQuestion.js";
+import { applyGeneralQuestionRoute, attachSupportingPhoto, enforceOffTopicRoute } from "./generalQuestion.js";
 import { applyTemplateIntentGuard } from "./sceneIntentGuard.js";
 import { hasKeyword } from "./keywordMatch.js";
 
@@ -61,7 +61,6 @@ function enrichWithNasaContext(sanitized, spaceDataContext, hasCustomClient, det
   if (detectedCategory?.queryType === "comparison") {
     sanitized.action_type = "SHOW_COMPARISON";
     sanitized.template_id = "NONE";
-    delete sanitized.parameters.is_general_question;
     const parts = String(detectedCategory.identifier || "").split("_vs_");
     if (parts.length === 2) {
       if (!sanitized.parameters.primary_object) {
@@ -186,20 +185,26 @@ const FOLLOWUP_PHOTO_HINTS = [
   "başka", "baska", "baka", "diğer", "diger", "farklı", "farkli", "bir tane", "bir sonraki", "sıradaki", "siradaki", "daha güncel",
 ];
 
+// Önceki deprem/afet veya uzay verisi sorusunun devamı olan detay/veri takip ifadeleri ("kaç şiddetinde", "tüm verilerini al" vb.)
+const FOLLOWUP_DATA_HINTS = [
+  "kaç şiddet", "kac siddet", "şiddeti", "siddeti", "büyüklüğü", "buyuklugu", "büyüklük", "buyukluk",
+  "derinliği", "derinligi", "derinlik", "merkez üssü", "merkez ussu", "nerede oldu", "ne zaman oldu",
+  "saat kaçta", "saat kacta", "tüm verileri", "tum verileri", "bütün verileri", "butun verileri",
+  "detayları", "detaylari", "koordinat", "enlem", "boylam", "artçı", "artci", "hasar", "fay",
+];
+
 function resolveContextualPrompt(promptText) {
   const current = detectNasaQueryCategory(promptText);
   const lower = promptText.toLowerCase();
   const isFollowupHint = FOLLOWUP_PHOTO_HINTS.some((h) => hasKeyword(lower, h));
+  const isDataFollowup = FOLLOWUP_DATA_HINTS.some((h) => hasKeyword(lower, h));
   const wantsDifferent = ["başka", "baska", "baka", "diğer", "diger", "farklı", "farkli", "yeni", "sıradaki"].some((w) =>
     hasKeyword(lower, w)
   );
 
-  // Kullanıcı aynı soruda teleskop adını tekrar yazsa bile "başka/farklı" istiyorsa sonraki görsele geç
-  if (current && current.identifier !== "default") {
+  // Açık bir takip veya veri devamı ifadesi yoksa soru kendi bağlamında çözülür; geçmişteki eski konu (ISS vb.) sorguya yapıştırılmaz
+  if (!isFollowupHint && !isDataFollowup) {
     return { effectivePrompt: promptText, resultIndex: wantsDifferent ? 1 : 0 };
-  }
-  if (!current && !isFollowupHint) {
-    return { effectivePrompt: promptText, resultIndex: 0 };
   }
 
   const history = getConversationHistory();
@@ -269,10 +274,15 @@ export async function getRouteFromGemini(userInput) {
     }
 
     const sanitized = applyTemplateIntentGuard(sanitizeGeminiOutput(parsedJson, isStudentMode), promptText);
-    enrichWithNasaContext(sanitized, spaceDataContext, runtimeInfo.hasCustomClient, detectedCategory);
-    withEarthEvents(sanitized, sanitized.parameters.focus_event_id);
-    await applyGeneralQuestionRoute(sanitized, promptText);
-    await attachSupportingPhoto(sanitized);
+    if (detectedCategory) {
+      delete sanitized.parameters.is_off_topic;
+    }
+    if (!enforceOffTopicRoute(sanitized)) {
+      enrichWithNasaContext(sanitized, spaceDataContext, runtimeInfo.hasCustomClient, detectedCategory);
+      withEarthEvents(sanitized, sanitized.parameters.focus_event_id);
+      await applyGeneralQuestionRoute(sanitized, promptText);
+      await attachSupportingPhoto(sanitized);
+    }
     recordTurnInHistory(promptText, sanitized.speech_text);
     logRouteTelemetry({ promptText, detectedCategory, keyIndex: rawResult.keyIndex, routeResult: sanitized, modelName: runtimeInfo.modelName, silent: runtimeInfo.silentTelemetry });
     return sanitized;

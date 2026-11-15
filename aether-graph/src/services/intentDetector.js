@@ -1,8 +1,7 @@
 // Kullanıcı girdisinden NASA/uzay veri niyetini algılar ve güvenli veri çeker
 
 import fs from "node:fs";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { fetchUniversalNasaPhoto, resolveNasaImageSearchConfig } from "./nasaPhotoFetcher.js";
 import { getFallbackSpaceData } from "./spaceDataFallback.js";
 import { hasKeyword } from "./keywordMatch.js";
@@ -10,7 +9,7 @@ import { hasKeyword } from "./keywordMatch.js";
 const PHOTO_INTENT_KEYWORDS = [
   "foto", "görsel", "gorsel", "resim", "resmi",
   "çektiği", "cektigi", "çekilen", "cekilen", "çekilmiş", "cekilmis", "ne çekti", "ne cekti",
-  "görüntü", "goruntu", "kare", "çekim", "cekim", "image", "photo",
+  "görüntü", "goruntu", "çekim", "cekim", "image", "photo",
 ];
 
 const APOD_KEYWORDS = [
@@ -26,7 +25,7 @@ const MARS_WEATHER_TERMS = [
 // Sıra önemli: "volkan patlaması" Güneş patlaması sanılmasın diye EONET, solar'dan önce bakılır
 const EONET_CATEGORY_KEYWORDS = [
   { category: "volcanoes", keywords: ["volkan", "yanardağ", "yanardag", "lav akı", "püskür", "puskur"] },
-  { category: "earthquakes", keywords: ["deprem", "sismik", "sarsıntı", "sarsinti"] },
+  { category: "earthquakes", keywords: ["deprem", "sismik", "sismograf", "sarsıntı", "sarsinti", "fay hatt", "merkez üssü", "merkez ussu", "richter", "artçı", "artci"] },
   { category: "wildfires", keywords: ["yangın", "yangin", "orman yang"] },
   { category: "severeStorms", keywords: ["kasırga", "kasirga", "tayfun", "siklon", "hortum", "fırtına", "firtina"] },
   { category: "floods", keywords: ["taşkın", "taskin", "su baskın", "sel felak"] },
@@ -201,7 +200,7 @@ export function detectNasaQueryCategory(promptText) {
   }
 
   if (
-    ["apollo", "lunar mod", "ay mod", "kartal", "eagle", "venera", "armstrong", "iniş görev", "perseverance", "persevarence", "persaverence", "james webb", "jwst", "hubble"]
+    ["apollo", "venera", "armstrong", "iniş görev", "perseverance", "persevarence", "persaverence", "james webb", "jwst", "hubble"]
       .some((kw) => hasKeyword(t, kw))
   ) {
     const id = resolveHistoricalMissionId(t);
@@ -212,12 +211,7 @@ export function detectNasaQueryCategory(promptText) {
     };
   }
 
-  const hasDistanceComparison =
-    findMentionedCelestialObjects(t).length >= 2 &&
-    ["mesafe", "uzaklık", "uzaklik"].some((kw) => hasKeyword(t, kw)) &&
-    !["ışık", "isik", "gecikme", "sinyal", "haberleşme", "haberlesme"].some((kw) => hasKeyword(t, kw));
-
-  if (["karşılaştır", "kıyasla", "vs", "hangisi daha büyük", "farkı ne"].some((kw) => hasKeyword(t, kw)) || hasDistanceComparison) {
+  if (["karşılaştır", "kıyasla", "vs", "hangisi daha büyük", "farkı ne"].some((kw) => hasKeyword(t, kw))) {
     const compId = resolveComparisonIdentifier(promptText);
     return {
       queryType: "comparison",
@@ -239,7 +233,7 @@ export async function fetchSpaceDataSafe(queryType, identifier, rawPromptText = 
 
   // Taha'nın dataLayer sözleşmesi varsa öncelikli olarak oradan oku
   try {
-    const dataLayerPath = path.resolve("src", "api", "dataLayer.js");
+    const dataLayerPath = fileURLToPath(new URL("../api/dataLayer.js", import.meta.url));
     if (fs.existsSync(dataLayerPath)) {
       const dataLayer = await import(pathToFileURL(dataLayerPath).href);
       if (typeof dataLayer.getSpaceData === "function") {

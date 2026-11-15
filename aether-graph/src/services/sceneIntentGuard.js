@@ -35,7 +35,6 @@ export const SCENE_TARGET_INSTRUCTION =
   "- Gezegen/uydu/cüce gezegen: SUN, MERCURY, VENUS, EARTH, MOON, MARS, JUPITER, IO, EUROPA, GANYMEDE, CALLISTO, SATURN, TITAN, URANUS, NEPTUNE, TRITON, CERES, PLUTO, HAUMEA, MAKEMAKE, ERIS.\n" +
   "- Uzay araçları: ISS, HUBBLE, JWST, PARKER (Parker Güneş Sondası), NEW_HORIZONS, VOYAGER_1, VOYAGER_2, MARS_PHOTO_SAT (Mars yörünge fotoğraf uydusu).\n" +
   "- Mars yüzeyi: PERSEVERANCE, CURIOSITY, INGENUITY, PATHFINDER.\n" +
-  "- Ay yüzeyi: APOLLO_LUNAR_MODULE (Apollo 11 Ay Modülü / Lunar Module / Eagle — Ay yüzeyinde durur).\n" +
-  "- Tekil 3D model sahnesi (Güneş Sistemi'nde yeri yok): ASTRONAUT_SUIT (astronot kıyafeti), SATURN_V (roket). Kullanıcı bunları görmek isterse bu kimliği yaz.\n" +
+  "- Tekil 3D model sahnesi (Güneş Sistemi'nde yeri yok): ASTRONAUT_SUIT (astronot kıyafeti), SATURN_V (roket), APOLLO_LUNAR_MODULE (Apollo ay modülü). Kullanıcı bunları görmek isterse bu kimliği yaz.\n" +
   "Soru bir cismin YAKININDAKİ aracı soruyorsa hedef cisim değil araçtır (ör. 'Güneş'te/Güneş'e yakın uzay aracı var mı?' → target_object 'PARKER').\n" +
   "template_id 'SOLAR_FLARE' YALNIZCA kullanıcı Güneş patlaması/parlaması/fırtınası/CME istediğinde, 'NEO_SWARM' YALNIZCA asteroit/göktaşı sorulduğunda, 'LIGHT_DELAY' YALNIZCA ışık/sinyal gecikmesi sorulduğunda seçilir; bir cismin adı geçti diye seçme.";
