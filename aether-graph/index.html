@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="./src/ui/styles-components.css">
   <link rel="stylesheet" href="./src/ui/eonetStyles.css">
   <link rel="stylesheet" href="./src/ui/styles-window.css">
+  <link rel="stylesheet" href="./src/ui/studentModeStyles.css">
 
   <script type="importmap">
     {
@@ -155,7 +156,7 @@
             <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm-9 9h18M12 3c2.6 2.5 3.8 5.5 3.8 9s-1.2 6.5-3.8 9c-2.6-2.5-3.8-5.5-3.8-9S9.4 5.5 12 3Z"/></svg>
           </span>
           <input id="command-input" class="eonet-query-input" type="text" autocomplete="off" spellcheck="false" maxlength="300">
-          <button id="mic-button" type="button" class="eonet-query-mic" aria-label="Sesli komut">
+          <button id="mic-button" type="button" class="eonet-query-mic is-idle" aria-label="Sesli komut" aria-pressed="false" data-state="IDLE">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="9" y="2" width="6" height="12" rx="3"></rect>
               <path d="M5 10a7 7 0 0 0 14 0"></path>
@@ -226,14 +227,6 @@
           </button>
         </div>
 
-        <button id="demo-add-homework-button" type="button" class="ag-settings-btn">
-          <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          Örnek Ödev Ekle
-        </button>
-
         <button id="reset-view-button" type="button" class="ag-settings-btn ag-reset-action">
           <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path>
@@ -266,20 +259,7 @@
       </div>
     </div>
 
-    <div id="homework-basket-container" class="ag-homework-basket-container is-hidden">
-      <div class="ag-homework-dialog ag-soft-panel" role="dialog" aria-modal="true" aria-labelledby="homework-basket-title">
-        <div class="ag-homework-header">
-          <h2 id="homework-basket-title" class="ag-homework-title">Küçük Kaşif Ödev Sepeti</h2>
-          <button id="close-basket-button" type="button" class="ag-btn ag-close-btn" aria-label="Ödev sepetini kapat">Kapat</button>
-        </div>
-        <div id="homework-printable-area" class="ag-homework-printable-area">
-          <ul id="homework-list" class="ag-homework-list"></ul>
-        </div>
-        <div class="ag-homework-footer">
-          <button id="export-pdf-button" type="button" class="ag-btn ag-export-btn">PDF İndir</button>
-        </div>
-      </div>
-    </div>
+    <div id="student-panel-root" class="student-mode-panel-root"></div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js" defer></script>

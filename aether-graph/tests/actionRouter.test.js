@@ -411,3 +411,71 @@ describe("actionRouter sözleşme ve yaşam döngüsü testleri", () => {
     }
   });
 });
+
+describe("actionRouter öğrenci paneli köprüsü", () => {
+  it("OPEN_SIDE_PANEL panel_view, CLOSE_PANEL ve SHOW_HOMEWORK_BASKET öğrenci paneline gider; is_student_mode bildirilir", () => {
+    const studentActions = [];
+    const modeChanges = [];
+    configureActionRouter({
+      doc: createMockDocument(),
+      onStudentAction: (actionType, parameters) => { studentActions.push([actionType, parameters.panel_view ?? null]); return true; },
+      onStudentModeChange: (flag) => modeChanges.push(flag)
+    });
+    const route = (action_type, parameters = {}, is_student_mode = false) =>
+      handleActionRouter({ action_type, template_id: "NONE", parameters, speech_text: "", is_student_mode });
+
+    route("OPEN_SIDE_PANEL", { panel_view: "STUDENT_MODE" });
+    route("SHOW_HOMEWORK_BASKET");
+    route("CLOSE_PANEL");
+    route("FOCUS_OBJECT", {}, false);
+    route("FOCUS_OBJECT", {}, true);
+    route("SIMPLIFY_TEXT", {}, false);
+
+    assert.deepEqual(studentActions, [["OPEN_SIDE_PANEL", "STUDENT_MODE"], ["SHOW_HOMEWORK_BASKET", null], ["CLOSE_PANEL", null]]);
+    assert.deepEqual(modeChanges, [true, false], "iç rotaların false değeri modu kapatmaz, SIMPLIFY_TEXT kapatır");
+  });
+
+  it("öğrenci modunda student_description açıklamanın yerine geçer", () => {
+    const added = [];
+    configureActionRouter({ doc: createMockDocument(), onHomeworkAdded: (item) => added.push(item) });
+    const params = { id: "mars", title: "Mars", description: "Uzun bilimsel metin", student_description: "Kırmızı gezegen" };
+    handleActionRouter({ action_type: "ADD_TO_HOMEWORK", template_id: "NONE", parameters: params, speech_text: "", is_student_mode: true });
+    handleActionRouter({ action_type: "SIMPLIFY_TEXT", template_id: "NONE", parameters: {}, speech_text: "", is_student_mode: false });
+    handleActionRouter({ action_type: "ADD_TO_HOMEWORK", template_id: "NONE", parameters: params, speech_text: "", is_student_mode: false });
+    assert.deepEqual(added.map((item) => item.description), ["Kırmızı gezegen", "Uzun bilimsel metin"]);
+  });
+});
+
+describe("ADD_TO_HOMEWORK aktif sahneyi korur", () => {
+  it("ödev aksiyonları sahne açmaz, karşılaştırma isteği yazmaz, fotoğraf pop-up'ı açmaz", async () => {
+    const mockDoc = createMockDocument();
+    const created = [];
+    const homework = [];
+    configureActionRouter({
+      doc: mockDoc,
+      create3DMissionScene: async (_container, modelUrl) => { created.push(modelUrl); return { destroy() {} }; },
+      onHomeworkAdded: (item) => homework.push(item)
+    });
+    handleActionRouter({ action_type: "FOCUS_OBJECT", template_id: "NONE", parameters: { model_url: "SOLAR_SYSTEM", camera_target: "MARS" }, speech_text: "", is_student_mode: false });
+    await Promise.resolve();
+    assert.deepEqual(created, ["SOLAR_SYSTEM"]);
+
+    const sceneContainer = mockDoc.getElementById("scene-container");
+    const result = handleActionRouter({
+      action_type: "ADD_TO_HOMEWORK", template_id: "GRAVITY_SIM",
+      parameters: { query: "Ay yerçekimini ödevime ekle", model_url: "PLANET_COMPARISON", primary_object: "MOON", secondary_object: "MOON", supporting_photo: true, image_url: "https://x/y.jpg" },
+      speech_text: "", is_student_mode: false
+    });
+    handleActionRouter({ action_type: "SHOW_HOMEWORK_BASKET", template_id: "NONE", parameters: { model_url: "EARTH_EVENTS" }, speech_text: "", is_student_mode: false });
+    handleActionRouter({ action_type: "EXPORT_PDF", template_id: "NONE", parameters: { model_url: "SOLAR_FLARE" }, speech_text: "", is_student_mode: false });
+    await Promise.resolve();
+
+    assert.equal(result.handled, true);
+    assert.equal(result.scene_promise, null);
+    assert.deepEqual(created, ["SOLAR_SYSTEM"], "yeni sahne açılmadı");
+    assert.equal(sceneContainer.getAttribute?.("data-comparison-request") ?? null, null);
+    assert.equal(mockDoc.getElementById("popup-container").classList.contains("is-hidden"), true);
+    assert.equal(homework.length, 1);
+    assert.equal(homework[0].query, "Ay yerçekimini ödevime ekle");
+  });
+});

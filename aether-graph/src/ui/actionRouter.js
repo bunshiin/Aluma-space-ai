@@ -12,6 +12,9 @@ export const VALID_ACTION_TYPES = Object.freeze([
   "ADD_TO_HOMEWORK", "SHOW_HOMEWORK_BASKET", "EXPORT_PDF"
 ]);
 
+// Ödev aksiyonları sadece sağ paneli günceller; aktif 3D sahneye ve kameraya dokunmaz
+const NON_NAVIGATING_ACTIONS = new Set(["ADD_TO_HOMEWORK", "SHOW_HOMEWORK_BASKET", "EXPORT_PDF"]);
+
 export const VALID_TEMPLATE_IDS = Object.freeze([
   "LIGHT_DELAY", "GRAVITY_SIM", "NEO_SWARM", "SOLAR_FLARE", "APOLLO_11", "NONE"
 ]);
@@ -24,7 +27,9 @@ let routerConfig = {
   onHomeworkAdded: null,
   onSidePanelAction: null,
   onExportPdf: null,
-  onSpeechText: null
+  onSpeechText: null,
+  onStudentAction: null,
+  onStudentModeChange: null
 };
 
 let hudController = null;
@@ -70,11 +75,6 @@ function getElements(doc) {
       titleEl: byId("popup-title"),
       contentEl: byId("popup-content"),
       closeButton: byId("popup-close-button")
-    },
-    homeworkBasket: {
-      container: byId("homework-basket-container"),
-      listEl: byId("homework-list"),
-      countBadge: byId("homework-count-badge")
     }
   };
 }
@@ -119,8 +119,7 @@ function closeOpenPanels() {
   closeAllPanels([
     cachedElements.sidePanel?.container,
     cachedElements.overlayCard,
-    cachedElements.popup?.container,
-    cachedElements.homeworkBasket?.container
+    cachedElements.popup?.container
   ]);
 }
 
@@ -137,7 +136,9 @@ export function configureActionRouter(options = {}) {
     onHomeworkAdded: options.onHomeworkAdded ?? null,
     onSidePanelAction: options.onSidePanelAction ?? null,
     onExportPdf: options.onExportPdf ?? null,
-    onSpeechText: options.onSpeechText ?? null
+    onSpeechText: options.onSpeechText ?? null,
+    onStudentAction: options.onStudentAction ?? null,
+    onStudentModeChange: options.onStudentModeChange ?? null
   };
   buildControllers();
 }
@@ -194,6 +195,14 @@ export function handleActionRouter(json) {
     is_student_mode: json.is_student_mode,
     speech_text: speechText
   });
+  // İç rotalar (varsayılan sahne, sıfırlama) is_student_mode: false taşır; modu sadece SIMPLIFY_TEXT kapatabilir
+  if (rawAction === "SIMPLIFY_TEXT" || json.is_student_mode === true) {
+    routerConfig.onStudentModeChange?.(hudState.is_student_mode);
+  }
+  // Öğrenci modunda kartlar sade metni (student_description) gösterir
+  if (hudState.is_student_mode && typeof parameters.student_description === "string" && parameters.student_description.trim()) {
+    parameters.description = parameters.student_description;
+  }
   hudController.renderStatus(rawAction, speechText);
   if (speechText) {
     routerConfig.onSpeechText?.(speechText);
@@ -206,7 +215,10 @@ export function handleActionRouter(json) {
     speech_text: speechText,
     is_student_mode: hudState.is_student_mode
   };
-  const viewportResult = viewportController.applyAction(rawAction, resolvedTemplateId, parameters, routePayload);
+  const isNavigating = !NON_NAVIGATING_ACTIONS.has(rawAction);
+  const viewportResult = isNavigating
+    ? viewportController.applyAction(rawAction, resolvedTemplateId, parameters, routePayload)
+    : { scene_promise: null, light_delay: null, has_active_scene: null };
 
   switch (rawAction) {
     case "OPEN_POPUP":
@@ -218,6 +230,8 @@ export function handleActionRouter(json) {
       }
       break;
     case "OPEN_SIDE_PANEL":
+      // Öğrenci modu / ödev sepeti görünümleri sağdaki Küçük Kaşif panelinde açılır
+      if (typeof parameters.panel_view === "string" && routerConfig.onStudentAction?.(rawAction, parameters) === true) break;
       renderSidePanel(
         cachedElements?.sidePanel,
         { ...parameters, template_id: resolvedTemplateId },
@@ -228,6 +242,7 @@ export function handleActionRouter(json) {
     case "CLOSE_PANEL":
     case "RESET_VIEW":
       closeOpenPanels();
+      routerConfig.onStudentAction?.(rawAction, parameters);
       break;
     case "SHOW_COMPARISON":
       if (parameters?.model_url === "PLANET_COMPARISON" || (!parameters?.model_url && Boolean(parameters?.primary_object || parameters?.secondary_object))) {
@@ -246,8 +261,7 @@ export function handleActionRouter(json) {
       routerConfig.onHomeworkAdded?.({ ...parameters, template_id: resolvedTemplateId });
       break;
     case "SHOW_HOMEWORK_BASKET":
-      cachedElements?.homeworkBasket?.container?.classList?.remove("is-hidden");
-      cachedElements?.homeworkBasket?.container?.setAttribute?.("aria-hidden", "false");
+      routerConfig.onStudentAction?.(rawAction, parameters);
       break;
     case "EXPORT_PDF":
       routerConfig.onExportPdf?.(parameters);
@@ -265,7 +279,7 @@ export function handleActionRouter(json) {
       break;
   }
   // Odak/kart aksiyonlarında konunun fotoğrafı da gelir (sunucu supporting_photo ile işaretler); sahne odağı korunur
-  if (rawAction !== "OPEN_POPUP" && parameters.supporting_photo === true && parameters.image_url) {
+  if (isNavigating && rawAction !== "OPEN_POPUP" && parameters.supporting_photo === true && parameters.image_url) {
     renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc);
   }
 

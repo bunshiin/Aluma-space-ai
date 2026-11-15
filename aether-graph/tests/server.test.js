@@ -150,3 +150,28 @@ test('POST /api/tts: ses yoksa nedeni X-Tts-Reason başlığıyla bildirir', asy
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('POST /api/topic-image: sorguyu kısaltıp fotoğraf bulucuya iletir, bulunamazsa boş obje döner', async () => {
+  const calls = [];
+  const getTopicImage = async (query, title) => {
+    calls.push([query, title]);
+    return query === 'Moon' ? { image_url: 'https://upload.wikimedia.org/moon.jpg', image_source: 'Wikipedia (en)' } : null;
+  };
+  const server = createRouteServer({ getRoute: async () => ({}), getTopicImage });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const send = (body, method = 'POST') => fetch(`${base}/api/topic-image`, { method, headers: { 'Content-Type': 'application/json' }, body });
+    const found = await send(JSON.stringify({ query: 'Moon', title: 'Ay', gizli: 'x' }));
+    assert.equal(found.status, 200);
+    assert.equal((await found.json()).image_url, 'https://upload.wikimedia.org/moon.jpg');
+    assert.deepEqual(await (await send(JSON.stringify({ query: 'Bilinmeyen' }))).json(), {});
+    assert.deepEqual(await (await send(JSON.stringify({ query: 5 }))).json(), {});
+    assert.equal((await send('{bozuk')).status, 400);
+    assert.equal((await send(undefined, 'GET')).status, 405);
+    assert.equal((await send(JSON.stringify({ query: 'x'.repeat(500) }))).status, 200);
+    assert.equal(calls.at(-1)[0].length, 100);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

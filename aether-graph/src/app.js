@@ -1,10 +1,9 @@
-// Uygulama giriş noktası: açılış, ayarlar, ödev sepeti, ses/PDF, sorgu kutusu, yanıt paneli ve sözleşme köprüsü.
+// Uygulama giriş noktası: açılış, ayarlar, öğrenci modu/ödev sepeti paneli, ses/PDF, sorgu kutusu, yanıt paneli ve sözleşme köprüsü.
 import texts from "./config/eonet_texts.json" with { type: "json" };
 import { handleActionRouter } from "./ui/actionRouter.js";
 import { createAnswerPanelController } from "./ui/answerPanelController.js";
 import { createContractBridge, loadExternalContracts, requestRouteFromServer, resolveFallbackActionType, resolveFallbackSceneParams } from "./ui/contractBridge.js";
 import { bindQueryBox } from "./ui/eonetQueryBox.js";
-import { exportHomeworkPdf } from "./ui/pdfExporter.js";
 import { createFallbackSpaceImageDataUri } from "./ui/popupController.js";
 import { createPopupWindow } from "./ui/popupWindow.js";
 import { setSettingsOpen, showLoadingSequence } from "./ui/bootLoader.js";
@@ -12,6 +11,11 @@ import { createMarsPhotoController } from "./ui/marsPhotoController.js";
 import { createSpeechController } from "./ui/speechController.js";
 import { createVoicePlayer } from "./ui/voicePlayer.js";
 import { createSubtitleController } from "./ui/subtitleController.js";
+import { createStudentModeController } from "./ui/studentModeController.js";
+import { isHomeworkIntent } from "./ui/routeFallbackParser.js";
+import { requestTopicImage } from "./ui/topicImageClient.js";
+
+const HOMEWORK_ACTIONS = new Set(["ADD_TO_HOMEWORK", "SHOW_HOMEWORK_BASKET", "EXPORT_PDF"]);
 
 function syncHomeworkVisibility(doc, count) {
   const basketToggleBtn = doc.getElementById("homework-basket-toggle");
@@ -20,32 +24,12 @@ function syncHomeworkVisibility(doc, count) {
   basketToggleBtn?.classList.toggle("is-hidden", count <= 0);
 }
 
-/**
- * Ödev sepetine benzersiz öğe ekler ve yalnızca en az 1 ödev varken sepet düğmesini gösterir.
- */
-export function addHomeworkItem(doc, item, homeworkKeys = new Set()) {
-  const listEl = doc.getElementById("homework-list");
-  if (!listEl) return homeworkKeys.size;
-
-  const key = String(item?.id || item?.title || "").trim();
-  if (!key || homeworkKeys.has(key)) {
-    syncHomeworkVisibility(doc, homeworkKeys.size);
-    return homeworkKeys.size;
-  }
-
-  homeworkKeys.add(key);
-  const li = doc.createElement("li");
-  li.className = "ag-homework-item";
-  li.textContent = String(item?.title || key);
-  listEl.appendChild(li);
-  syncHomeworkVisibility(doc, homeworkKeys.size);
-  return homeworkKeys.size;
-}
-
 function buildFallbackRoute(trimmed, isStudentMode) {
   const actionType = resolveFallbackActionType(trimmed);
   const sceneParams = actionType === "RESET_VIEW" ? {} : resolveFallbackSceneParams(trimmed);
   const { template_id: fallbackTemplateId = "NONE", ...restSceneParams } = sceneParams;
+  // Ödeve eklemede sahne parametresi taşınmaz; konu metinden çözülür
+  if (actionType === "ADD_TO_HOMEWORK") return { action_type: actionType, template_id: "NONE", parameters: { query: trimmed }, speech_text: "", is_student_mode: Boolean(isStudentMode) };
   const params = { query: trimmed, title: trimmed, step_id: trimmed, ...restSceneParams };
   if (actionType === "OPEN_POPUP") params.image_url = createFallbackSpaceImageDataUri(trimmed, fallbackTemplateId);
   return { action_type: actionType, template_id: fallbackTemplateId, parameters: params, speech_text: "", is_student_mode: Boolean(isStudentMode) };
@@ -67,11 +51,15 @@ export function submitTextCommand(doc, rawText) {
   return result;
 }
 
+function setPressedState(buttonEl, isActive) {
+  if (!buttonEl) return;
+  buttonEl.classList.toggle("is-active", isActive);
+  buttonEl.setAttribute("aria-pressed", String(isActive));
+}
+
 function togglePressedState(buttonEl) {
   if (!buttonEl) return;
-  const nextActive = !buttonEl.classList.contains("is-active");
-  buttonEl.classList.toggle("is-active", nextActive);
-  buttonEl.setAttribute("aria-pressed", String(nextActive));
+  setPressedState(buttonEl, !buttonEl.classList.contains("is-active"));
 }
 
 function cycleHudSize(hudEl) {
@@ -98,14 +86,12 @@ function hasAsyncContracts(c) {
 export function initApp(doc = typeof document !== "undefined" ? document : null, options = {}) {
   if (!doc) return null;
 
-  const homeworkKeys = new Set();
   const byId = (id) => doc.getElementById(id);
   const hudEl = byId("hud-container");
   const settingsPanelEl = byId("settings-panel");
   const settingsToggleBtn = byId("settings-toggle-button");
   const studentToggleBtn = byId("student-mode-toggle");
   const ttsToggleBtn = byId("tts-toggle-button");
-  const basketContainerEl = byId("homework-basket-container");
   const sidePanelEl = byId("side-panel-container");
   const popupElements = { container: byId("popup-container"), titleEl: byId("popup-title"), contentEl: byId("popup-content") };
   const commandInputEl = byId("command-input");
@@ -113,6 +99,21 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
   const statusBadgeEl = byId("status-badge");
   const answerPanel = createAnswerPanelController(byId("app-shell"), texts);
   const subtitle = createSubtitleController(byId("subtitle-bar"));
+  const studentMode = createStudentModeController({
+    container: byId("student-panel-root"),
+    getTopicImage: (query, title) => requestTopicImage(query, title),
+    onBasketChange: (count) => syncHomeworkVisibility(doc, count),
+    getSpaceData: () => bridge?.getContracts().getSpaceData,
+    onAskQuestion: (question) => runCommand(question),
+    onStudentModeChange: (isStudentMode, source) => {
+      setPressedState(studentToggleBtn, isStudentMode);
+      // Panelden gelen seçim HUD'a da router üzerinden iletilir; router kaynaklıysa HUD zaten güncel
+      if (source !== "router") {
+        handleActionRouter({ action_type: "SIMPLIFY_TEXT", template_id: "NONE", parameters: {}, speech_text: "", is_student_mode: isStudentMode });
+      }
+    }
+  });
+  const isStudentModeActive = () => studentMode.getState().is_student_mode;
 
   let destroyed = false;
   let bridge = null;
@@ -123,12 +124,14 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
     handleActionRouter({
       action_type: "FOCUS_OBJECT", template_id: "NONE",
       parameters: { model_url: "SOLAR_SYSTEM", camera_target: cameraTarget },
-      speech_text: "", is_student_mode: false
+      speech_text: "", is_student_mode: isStudentModeActive()
     });
   };
 
   const applyResolvedRoute = (route) => {
     const result = handleActionRouter(route);
+    // Ödev aksiyonları açık afet panelini ve altyazıyı olduğu gibi bırakır (kullanıcı baktığı yerden ayrılmaz)
+    if (HOMEWORK_ACTIONS.has(route?.action_type)) return result;
     if (route?.action_type === "RESET_VIEW") {
       answerPanel.close();
       subtitle.hide();
@@ -142,6 +145,11 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
     const trimmed = String(rawText || "").trim();
     if (!trimmed) return null;
     const isStudentMode = studentToggleBtn?.classList.contains("is-active") ?? false;
+    // "Ay yerçekimini ödevime ekle": Gemini'ye gitmeden ve sahne değiştirmeden doğrudan ödev paneline yazılır
+    if (isHomeworkIntent(trimmed)) {
+      if (commandInputEl) commandInputEl.value = "";
+      return applyResolvedRoute({ action_type: "ADD_TO_HOMEWORK", template_id: "NONE", parameters: { query: trimmed }, speech_text: "", is_student_mode: isStudentMode });
+    }
     if (commandInputEl) commandInputEl.value = "";
     subtitle.hide();
     if (!hasAsyncContracts(bridge.getContracts())) {
@@ -156,24 +164,36 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
       });
   };
 
-  const speechCtrl = createSpeechController({
-    micButton: micButtonEl, commandInput: commandInputEl, statusBadge: statusBadgeEl, onTranscript: (text) => runCommand(text)
-  });
+  let speechCtrl = null;
   const voice = createVoicePlayer({
     is_enabled: ttsToggleBtn?.classList.contains("is-active") ?? true,
+    doc,
+    onStart: () => speechCtrl?.setSpeaking(true),
+    onEnd: () => speechCtrl?.setSpeaking(false),
+    onStop: () => speechCtrl?.setSpeaking(false),
     onUnavailable: (reason) => {
       if (statusBadgeEl) statusBadgeEl.textContent = reason === "quota_exceeded" ? "SES_KOTASI_DOLDU" : "SES_KAPALI";
     }
   });
+  speechCtrl = createSpeechController({
+    micButton: micButtonEl,
+    commandInput: commandInputEl,
+    statusBadge: statusBadgeEl,
+    voicePlayer: voice,
+    doc,
+    onTranscript: (text) => runCommand(text)
+  });
 
   bridge = createContractBridge({
     doc, contracts: options.contracts || {},
-    onHomeworkAdded: (item) => addHomeworkItem(doc, item, homeworkKeys),
-    onExportPdf: () => exportHomeworkPdf(byId("homework-printable-area")),
+    onHomeworkAdded: (item) => studentMode.handleAction("ADD_TO_HOMEWORK", item),
+    onExportPdf: () => studentMode.exportPdf(),
+    onStudentAction: (actionType, parameters) => studentMode.handleAction(actionType, parameters),
+    onStudentModeChange: (isStudentMode) => studentMode.setStudentMode(isStudentMode, "router"),
     onSpeechText: (speechText) => voice.speak(speechText)
   });
 
-  syncHomeworkVisibility(doc, homeworkKeys.size);
+  syncHomeworkVisibility(doc, 0);
   cancelLoading = options.skipBootLoading ? () => {} : showLoadingSequence(doc);
   if (!options.contracts && !options.skipBootLoading && typeof globalThis.window !== "undefined" && doc === globalThis.document) {
     loadExternalContracts((spec) => {
@@ -204,48 +224,40 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
     }
   });
   byId("settings-close-button")?.addEventListener("click", () => setSettingsOpen(settingsPanelEl, settingsToggleBtn, false));
-  studentToggleBtn?.addEventListener("click", () => togglePressedState(studentToggleBtn));
+  studentToggleBtn?.addEventListener("click", () => {
+    setSettingsOpen(settingsPanelEl, settingsToggleBtn, false);
+    studentMode.handleAction("OPEN_SIDE_PANEL", { panel_view: "STUDENT_MODE" });
+  });
   ttsToggleBtn?.addEventListener("click", () => {
     togglePressedState(ttsToggleBtn);
     voice.setEnabled(ttsToggleBtn.classList.contains("is-active"));
   });
   byId("hud-size-toggle")?.addEventListener("click", () => cycleHudSize(hudEl));
-  byId("homework-basket-toggle")?.addEventListener("click", () => basketContainerEl?.classList.remove("is-hidden"));
-  byId("close-basket-button")?.addEventListener("click", () => basketContainerEl?.classList.add("is-hidden"));
+  byId("homework-basket-toggle")?.addEventListener("click", () => studentMode.handleAction("SHOW_HOMEWORK_BASKET"));
   byId("side-panel-close-button")?.addEventListener("click", () => sidePanelEl?.classList.add("is-hidden"));
   byId("popup-close-button")?.addEventListener("click", () => {
     popupElements.container?.classList.add("is-hidden");
     popupElements.container?.setAttribute?.("aria-hidden", "true");
   });
-  byId("export-pdf-button")?.addEventListener("click", () => handleActionRouter({ action_type: "EXPORT_PDF", template_id: "NONE", parameters: {}, speech_text: "", is_student_mode: false }));
-  byId("demo-add-homework-button")?.addEventListener("click", () => {
-    const nextIndex = homeworkKeys.size + 1;
-    addHomeworkItem(doc, { id: `task-${nextIndex}`, title: `Görev Notu #${nextIndex}` }, homeworkKeys);
-  });
-  doc.addEventListener("ag:homework-added", (event) => {
-    const detail = event && "detail" in event ? event.detail : null;
-    if (detail) addHomeworkItem(doc, detail, homeworkKeys);
-  });
   byId("reset-view-button")?.addEventListener("click", () => {
     answerPanel.close();
-    const result = handleActionRouter({ action_type: "RESET_VIEW", template_id: "NONE", parameters: {}, speech_text: "", is_student_mode: false });
+    const result = handleActionRouter({ action_type: "RESET_VIEW", template_id: "NONE", parameters: {}, speech_text: "", is_student_mode: isStudentModeActive() });
     setSettingsOpen(settingsPanelEl, settingsToggleBtn, false);
     cancelLoading();
     if (bridge.getContracts().create3DMissionScene) {
       if (!result?.has_active_scene) openDefaultSolarSystem("SUN");
     } else cancelLoading = showLoadingSequence(doc);
   });
-  micButtonEl?.addEventListener("click", () => speechCtrl.toggleListening());
   const queryBox = bindQueryBox(byId("command-form"), byId("query-status"), texts, (text) => runCommand(text));
   const popupWindow = createPopupWindow({ container: popupElements.container, dialog: byId("popup-dialog"), titlebar: byId("popup-titlebar"), minimizeButton: byId("popup-minimize-button") });
   const marsPhotos = createMarsPhotoController({ getSpaceDataFn: () => bridge.getContracts().getSpaceData, onRoute: (route) => applyResolvedRoute(route) });
 
   return {
-    addHomework: (item) => addHomeworkItem(doc, item, homeworkKeys),
+    addHomework: (item) => studentMode.addItem(item),
     submitCommand: (text) => runCommand(text),
     setContracts: (contracts) => bridge.setContracts(contracts),
     replayLoading: () => { cancelLoading(); cancelLoading = showLoadingSequence(doc); },
-    destroy: () => { destroyed = true; cancelLoading(); speechCtrl.destroy(); voice.destroy(); queryBox.destroy(); answerPanel.destroy(); marsPhotos.destroy(); popupWindow.destroy(); subtitle.destroy(); }
+    destroy: () => { destroyed = true; cancelLoading(); speechCtrl.destroy(); voice.destroy(); queryBox.destroy(); answerPanel.destroy(); marsPhotos.destroy(); popupWindow.destroy(); subtitle.destroy(); studentMode.destroy(); }
   };
 }
 

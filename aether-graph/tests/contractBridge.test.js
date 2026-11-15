@@ -449,3 +449,20 @@ test("enrichRoutePayload Gemini zengin içerik verdiyse yönlendirme alanların�
   assert.equal(labels.includes("target_object"), false);
   assert.equal(labels.includes("image_query"), false);
 });
+
+test("'ödevime ekle' komutu Gemini'ye gitmez, sahne parametresi taşımaz", async () => {
+  resetActionRouterState();
+  let geminiCalls = 0;
+  const bridge = createContractBridge({ doc: createMockDom(), contracts: { getRouteFromGemini: async () => { geminiCalls += 1; return null; } } });
+  const route = await bridge.resolveUserCommand("Ay yerçekimini ödevime ekle", true);
+  assert.equal(geminiCalls, 0);
+  assert.deepEqual(route, { action_type: "ADD_TO_HOMEWORK", template_id: "NONE", parameters: { query: "Ay yerçekimini ödevime ekle" }, speech_text: "", is_student_mode: true });
+
+  const fromGemini = await enrichRoutePayload({
+    action_type: "ADD_TO_HOMEWORK", template_id: "GRAVITY_SIM",
+    parameters: { primary_object: "MOON", secondary_object: "MOON", model_url: "PLANET_COMPARISON", camera_target: "MOON" }
+  }, {}, "Ay yerçekimini kaydet");
+  assert.equal(fromGemini.action_type, "ADD_TO_HOMEWORK");
+  assert.equal(fromGemini.template_id, "NONE");
+  assert.deepEqual(fromGemini.parameters, { query: "Ay yerçekimini kaydet" });
+});
