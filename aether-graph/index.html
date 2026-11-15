@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="tr" class="ag-root">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aluma</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&family=Orbitron:wght@600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="./src/ui/styles-core.css">
+  <link rel="stylesheet" href="./src/ui/styles-components.css">
+  <link rel="stylesheet" href="./src/ui/eonetStyles.css">
+  <link rel="stylesheet" href="./src/ui/styles-window.css">
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+        "@google/genai": "https://cdn.jsdelivr.net/npm/@google/genai/+esm"
+      }
+    }
+  </script>
+</head>
+<body class="ag-body">
+  <div id="app-shell" class="ag-app-shell eonet-theme">
+    <div class="ag-cosmos-grid" aria-hidden="true"></div>
+
+    <main id="viewport-area" class="ag-viewport-area">
+      <div id="scene-container" class="ag-scene-container"></div>
+
+      <div id="canvas-container" class="ag-canvas-container is-hidden">
+        <canvas id="procedural-canvas" class="ag-procedural-canvas"></canvas>
+      </div>
+    </main>
+
+    <div id="loading-overlay" class="ag-loading-overlay" role="status" aria-live="polite">
+      <div class="ag-loading-shell">
+        <div class="ag-astrometry-rig" aria-hidden="true">
+          <svg class="ag-telemetry-dial" viewBox="0 0 240 240" fill="none">
+            <circle cx="120" cy="120" r="114" stroke="currentColor" stroke-width="1" stroke-dasharray="2 10" />
+            <circle cx="120" cy="120" r="102" stroke="currentColor" stroke-width="0.75" opacity="0.55" />
+            <line x1="120" y1="2" x2="120" y2="14" stroke="#38bdf8" stroke-width="1.2" opacity="0.75" />
+            <line x1="120" y1="226" x2="120" y2="238" stroke="#38bdf8" stroke-width="1.2" opacity="0.75" />
+            <line x1="2" y1="120" x2="14" y2="120" stroke="#38bdf8" stroke-width="1.2" opacity="0.75" />
+            <line x1="226" y1="120" x2="238" y2="120" stroke="#38bdf8" stroke-width="1.2" opacity="0.75" />
+          </svg>
+          <div class="ag-telemetry-crosshair-h"></div>
+          <div class="ag-telemetry-crosshair-v"></div>
+
+          <div class="ag-orbit-plane">
+            <div class="ag-orbit-ellipse ag-orbit-ellipse-inner">
+              <span class="ag-orbital-node"><span class="ag-orbital-node-dot"></span></span>
+            </div>
+            <div class="ag-orbit-ellipse ag-orbit-ellipse-mid">
+              <span class="ag-orbital-node ag-orbital-node-cyan"><span class="ag-orbital-node-dot-cyan"></span></span>
+            </div>
+            <div class="ag-orbit-ellipse ag-orbit-ellipse-outer">
+              <span class="ag-orbital-node"><span class="ag-orbital-node-dot"></span></span>
+            </div>
+          </div>
+
+          <div class="ag-orbit-plane-inclined">
+            <div class="ag-orbit-ellipse ag-orbit-ellipse-aux">
+              <span class="ag-orbital-node ag-orbital-node-cyan"><span class="ag-orbital-node-dot-cyan"></span></span>
+            </div>
+          </div>
+
+          <div class="ag-star-calibration"></div>
+          <div class="ag-star-point"></div>
+        </div>
+
+        <div class="ag-loading-meta">
+          <span class="ag-loading-system-tag">ALUMA // SYSTEM LOADING</span>
+          <p class="ag-loading-title">Sinyal işleniyor…</p>
+          <div class="ag-loading-track">
+            <div id="loading-progress-bar" class="ag-loading-progress-bar"></div>
+          </div>
+          <p id="loading-progress-text" class="ag-loading-progress-text">%0</p>
+        </div>
+      </div>
+    </div>
+
+    <section id="hud-container" class="ag-hud-container is-hidden" aria-label="Komut ve durum arayüzü">
+      <header class="ag-hud-top">
+        <div class="ag-brand-cluster">
+          <div class="ag-brand-row">
+            <svg class="ag-brand-logo" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="aluma-cyan-grad" x1="14" y1="54" x2="32" y2="9" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#0284c7" />
+                  <stop offset="60%" stop-color="#22d3ee" />
+                  <stop offset="100%" stop-color="#cffafe" />
+                </linearGradient>
+                <linearGradient id="aluma-gold-grad" x1="50" y1="54" x2="32" y2="9" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#f59e0b" />
+                  <stop offset="60%" stop-color="#fbbf24" />
+                  <stop offset="100%" stop-color="#fef9c3" />
+                </linearGradient>
+                <linearGradient id="aluma-orbit-grad" x1="-26" y1="0" x2="26" y2="0" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#22d3ee" />
+                  <stop offset="55%" stop-color="#67e8f9" />
+                  <stop offset="100%" stop-color="#fbbf24" />
+                </linearGradient>
+                <radialGradient id="aluma-orb-grad" cx="35%" cy="35%" r="65%">
+                  <stop offset="0%" stop-color="#fffbeb" />
+                  <stop offset="55%" stop-color="#fde047" />
+                  <stop offset="100%" stop-color="#f59e0b" />
+                </radialGradient>
+              </defs>
+              <g transform="translate(32 34) rotate(-22)">
+                <path d="M -26 0 A 26 8.5 0 0 1 26 0" stroke="url(#aluma-orbit-grad)" stroke-width="2.1" opacity="0.72" />
+                <circle cx="13" cy="-7.3" r="6.8" fill="#fbbf24" opacity="0.22" />
+                <circle cx="13" cy="-7.3" r="4.1" fill="url(#aluma-orb-grad)" />
+              </g>
+              <path d="M 32 9 L 13 54 L 22.5 54 L 32 23 Z" fill="url(#aluma-cyan-grad)" />
+              <path d="M 32 9 L 51 54 L 41.5 54 L 32 23 Z" fill="url(#aluma-gold-grad)" />
+              <g transform="translate(32 34) rotate(-22)">
+                <path d="M -26 0 A 26 8.5 0 0 0 26 0" stroke="url(#aluma-orbit-grad)" stroke-width="3.6" stroke-linecap="round" />
+              </g>
+            </svg>
+            <h1 class="ag-brand-title">Aluma</h1>
+          </div>
+          <div class="ag-brand-laser" aria-hidden="true"></div>
+          <span id="status-badge" class="ag-status-badge" aria-live="polite"></span>
+        </div>
+
+        <div class="ag-top-right-nodes">
+          <button id="homework-basket-toggle" type="button" class="ag-node-btn is-hidden">
+            <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <path d="M16 10a4 4 0 0 1-8 0"></path>
+            </svg>
+            Ödev Sepeti
+            <span id="homework-count-badge" class="ag-badge">0</span>
+          </button>
+
+          <button id="settings-toggle-button" type="button" class="ag-node-btn" aria-expanded="false" aria-controls="settings-panel">
+            <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="4" y1="7" x2="20" y2="7"></line>
+              <circle cx="9" cy="7" r="2"></circle>
+              <line x1="4" y1="17" x2="20" y2="17"></line>
+              <circle cx="15" cy="17" r="2"></circle>
+            </svg>
+            Ayarlar
+          </button>
+        </div>
+      </header>
+
+      <p id="subtitle-bar" class="ag-subtitle is-hidden" aria-live="polite"></p>
+      <div id="query-dock" class="eonet-query-dock">
+        <form id="command-form" class="eonet-query" role="search">
+          <span class="eonet-query-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm-9 9h18M12 3c2.6 2.5 3.8 5.5 3.8 9s-1.2 6.5-3.8 9c-2.6-2.5-3.8-5.5-3.8-9S9.4 5.5 12 3Z"/></svg>
+          </span>
+          <input id="command-input" class="eonet-query-input" type="text" autocomplete="off" spellcheck="false" maxlength="300">
+          <button id="mic-button" type="button" class="eonet-query-mic" aria-label="Sesli komut">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+              <path d="M5 10a7 7 0 0 0 14 0"></path>
+              <line x1="12" y1="17" x2="12" y2="22"></line>
+            </svg>
+          </button>
+          <button id="command-submit-button" class="eonet-query-submit" type="submit">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6 3.4 10.2 15 12 3.4 13.8Z"/></svg>
+          </button>
+          <div class="eonet-query-progress" aria-hidden="true"></div>
+        </form>
+        <div id="query-status" class="eonet-query-status" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <aside id="settings-panel" class="ag-settings-panel ag-soft-panel is-hidden" aria-label="Ayarlar menüsü">
+      <div class="ag-settings-header">
+        <h2 class="ag-settings-title">AYARLAR</h2>
+        <button id="settings-close-button" type="button" class="ag-btn ag-close-btn" aria-label="Ayarları kapat">Kapat</button>
+      </div>
+      <div class="ag-settings-list">
+        <button id="student-mode-toggle" type="button" class="ag-settings-btn" aria-pressed="false">
+          <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+          </svg>
+          Öğrenci Modu
+        </button>
+
+        <button id="tts-toggle-button" type="button" class="ag-settings-btn is-active" aria-pressed="true">
+          <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+          Sesli Okuma
+        </button>
+
+        <button id="hud-size-toggle" type="button" class="ag-settings-btn">
+          <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+          HUD Görünümü
+        </button>
+
+        <button id="simplify-text-button" type="button" class="ag-settings-btn">
+          <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2z"></path>
+          </svg>
+          Metni Sadeleştir
+        </button>
+
+        <div class="ag-settings-pair">
+          <button id="play-animation-button" type="button" class="ag-settings-btn">
+            <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="6 3 20 12 6 21 6 3"></polygon>
+            </svg>
+            Oynat
+          </button>
+          <button id="pause-animation-button" type="button" class="ag-settings-btn">
+            <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+            Duraklat
+          </button>
+        </div>
+
+        <button id="demo-add-homework-button" type="button" class="ag-settings-btn">
+          <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Örnek Ödev Ekle
+        </button>
+
+        <button id="reset-view-button" type="button" class="ag-settings-btn ag-reset-action">
+          <svg class="ag-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+          Görünümü Sıfırla
+        </button>
+      </div>
+    </aside>
+
+    <aside id="side-panel-container" class="ag-side-panel-container ag-soft-panel is-hidden" aria-label="Görev paneli">
+      <div id="side-panel-header" class="ag-side-panel-header">
+        <h2 id="side-panel-title" class="ag-side-panel-title"></h2>
+        <button id="side-panel-close-button" type="button" class="ag-btn ag-close-btn" aria-label="Paneli kapat">Kapat</button>
+      </div>
+      <div id="side-panel-body" class="ag-side-panel-body"></div>
+      <div id="side-panel-actions" class="ag-side-panel-actions"></div>
+    </aside>
+
+    <section id="overlay-card-container" class="ag-overlay-card-container ag-soft-panel is-hidden" aria-label="Bilgi kartı"></section>
+
+    <div id="popup-container" class="ag-popup-container is-hidden">
+      <div id="popup-dialog" class="ag-popup-dialog ag-soft-panel" role="dialog" aria-modal="false" aria-labelledby="popup-title">
+        <div id="popup-titlebar" class="ag-popup-titlebar">
+          <h2 id="popup-title" class="ag-popup-title"></h2>
+          <button id="popup-minimize-button" type="button" class="ag-window-btn" aria-label="Pencereyi küçült" aria-pressed="false">–</button>
+          <button id="popup-close-button" type="button" class="ag-window-btn ag-window-close" aria-label="Pencereyi kapat">×</button>
+        </div>
+        <div id="popup-content" class="ag-popup-content"></div>
+      </div>
+    </div>
+
+    <div id="homework-basket-container" class="ag-homework-basket-container is-hidden">
+      <div class="ag-homework-dialog ag-soft-panel" role="dialog" aria-modal="true" aria-labelledby="homework-basket-title">
+        <div class="ag-homework-header">
+          <h2 id="homework-basket-title" class="ag-homework-title">Küçük Kaşif Ödev Sepeti</h2>
+          <button id="close-basket-button" type="button" class="ag-btn ag-close-btn" aria-label="Ödev sepetini kapat">Kapat</button>
+        </div>
+        <div id="homework-printable-area" class="ag-homework-printable-area">
+          <ul id="homework-list" class="ag-homework-list"></ul>
+        </div>
+        <div class="ag-homework-footer">
+          <button id="export-pdf-button" type="button" class="ag-btn ag-export-btn">PDF İndir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js" defer></script>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>

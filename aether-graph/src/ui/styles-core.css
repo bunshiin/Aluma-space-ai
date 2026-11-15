@@ -1,0 +1,189 @@
+/* Düz mat koyu uzay düzeni, 3B astrometri telemetri yükleme sahnesi ve UI giriş animasyonu */
+.ag-root { color-scheme: dark; font-size: 16px; }
+
+.ag-body {
+  margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden;
+  background-color: #030508; color: #f1f5f9;
+  font-family: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ag-app-shell {
+  position: relative; display: flex; flex-direction: column; width: 100%; height: 100%;
+  background-color: #030508;
+}
+
+/* Düz teknik telemetri ızgarası etkileşimi kesmeden uzaysal ölçek verir. */
+.ag-cosmos-grid {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Cpath d='M56 0H0V56' fill='none' stroke='rgba(255,255,255,0.03)' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 56px 56px;
+}
+
+.ag-viewport-area {
+  position: relative; z-index: 2; flex: 1; display: flex; flex-direction: row;
+  min-width: 0; min-height: 0; overflow: hidden;
+}
+
+.ag-app-shell.is-split-screen .ag-viewport-area { gap: 1px; background-color: rgba(255, 255, 255, 0.12); }
+.ag-scene-container { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+
+.ag-canvas-container {
+  position: relative; flex: 1; display: flex; align-items: center; justify-content: center;
+  min-width: 0; min-height: 0; padding: 1.25rem; box-sizing: border-box;
+  background-color: #05080e;
+}
+
+.ag-procedural-canvas {
+  max-width: 100%; max-height: 100%; display: block; border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Açılış ve sahne geçişlerinde görünen 3B astrometri yörünge telemetri sahnesi */
+.ag-loading-overlay {
+  position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
+  padding: 1.5rem; background-color: #030508;
+}
+
+.ag-loading-shell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem;
+  width: min(26rem, 92vw);
+}
+
+.ag-astrometry-rig {
+  position: relative; width: min(23rem, 60vmin); height: min(23rem, 60vmin);
+  display: flex; align-items: center; justify-content: center;
+  perspective: 900px; pointer-events: none;
+}
+
+.ag-telemetry-dial {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  color: rgba(255, 255, 255, 0.18);
+  animation: ag-spin-cw 80s linear infinite;
+}
+
+.ag-telemetry-crosshair-h {
+  position: absolute; left: 4%; right: 4%; top: 50%; height: 1px;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.ag-telemetry-crosshair-v {
+  position: absolute; top: 4%; bottom: 4%; left: 50%; width: 1px;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.ag-orbit-plane {
+  position: absolute; inset: 8%; transform-style: preserve-3d;
+  transform: rotateX(64deg) rotateZ(-18deg);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.ag-orbit-plane-inclined {
+  position: absolute; inset: 14%; transform-style: preserve-3d;
+  transform: rotateX(72deg) rotateY(22deg);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.ag-orbit-ellipse {
+  position: absolute; top: 50%; left: 50%; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transform: translate(-50%, -50%);
+  animation: ag-orbit-spin linear infinite;
+}
+
+.ag-orbit-ellipse-inner { width: 38%; height: 38%; border-color: rgba(56, 189, 248, 0.36); animation-duration: 7s; }
+.ag-orbit-ellipse-mid { width: 64%; height: 64%; border-style: dashed; border-color: rgba(255, 255, 255, 0.22); animation-duration: 13s; }
+.ag-orbit-ellipse-outer { width: 92%; height: 92%; border-color: rgba(255, 255, 255, 0.14); animation-duration: 22s; }
+.ag-orbit-ellipse-aux { width: 82%; height: 82%; border-color: rgba(56, 189, 248, 0.24); animation-duration: 17s; }
+
+/* Yörüngelerdeki minik hedef retikülleri çocuksu gezegen topları yerine teknik işaretçi çizer. */
+.ag-orbital-node {
+  position: absolute; top: 0; left: 50%; width: 12px; height: 12px;
+  border-radius: 50%; border: 1px solid rgba(56, 189, 248, 0.72);
+  transform: translate(-50%, -50%);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.ag-orbital-node-dot {
+  width: 4px; height: 4px; border-radius: 50%; background-color: #f8fafc;
+}
+
+.ag-orbital-node-cyan {
+  border-color: rgba(248, 250, 252, 0.45);
+}
+
+.ag-orbital-node-dot-cyan {
+  width: 4px; height: 4px; border-radius: 50%; background-color: #38bdf8;
+}
+
+.ag-star-point {
+  position: relative; width: 6px; height: 6px; border-radius: 50%;
+  background-color: #f8fafc;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.55);
+}
+
+.ag-star-calibration {
+  position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+  border-radius: 50%; border: 1px solid rgba(56, 189, 248, 0.55);
+  transform: translate(-50%, -50%);
+  animation: ag-pulse-calm 3s ease-in-out infinite;
+}
+
+/* Düz teknik telemetri ilerleme bloğu */
+.ag-loading-meta {
+  display: flex; flex-direction: column; align-items: center; gap: 0.55rem; width: 16rem; text-align: center;
+}
+
+.ag-loading-system-tag {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.24em; white-space: nowrap; color: #38bdf8;
+}
+
+.ag-loading-title { margin: 0; font-size: 0.9rem; font-weight: 400; color: #94a3b8; }
+
+.ag-loading-track {
+  width: 13rem; height: 2px; overflow: hidden; border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.ag-loading-progress-bar {
+  width: 0%; height: 100%; border-radius: 999px;
+  background-color: #38bdf8; transition: width 0.12s linear;
+}
+
+.ag-loading-progress-text {
+  margin: 0; font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.78rem; font-variant-numeric: tabular-nums; color: #cbd5e1;
+}
+
+@keyframes ag-orbit-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes ag-spin-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ag-pulse-calm {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.55; }
+  50% { transform: translate(-50%, -50%) scale(1.25); opacity: 0.95; }
+}
+
+@keyframes ag-ui-float-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ag-popup-dialog-in {
+  0% { opacity: 0; transform: translateY(42px) scale(0.82); }
+  55% { opacity: 0.92; transform: translateY(-3px) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes ag-popup-image-in {
+  0% { opacity: 0; transform: translateY(24px) scale(0.88); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+

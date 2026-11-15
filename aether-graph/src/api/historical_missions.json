@@ -1,0 +1,215 @@
+{
+  "missions": [
+    {
+      "id": "apollo_11",
+      "name": "Apollo 11",
+      "target": "Moon",
+      "launch_date": "1969-07-16",
+      "landing_date": "1969-07-20",
+      "landing_site": "Mare Tranquillitatis",
+      "coordinates": {
+        "latitude_deg": 0.67408,
+        "longitude_deg": 23.47297
+      },
+      "crew": [
+        "Neil Armstrong",
+        "Buzz Aldrin",
+        "Michael Collins"
+      ],
+      "description": "İnsanlığın Ay yüzeyine ilk inişini gerçekleştirdiği tarihi Apollo görevi."
+    },
+    {
+      "id": "venera_7",
+      "name": "Venera 7",
+      "target": "Venus",
+      "launch_date": "1970-08-17",
+      "landing_date": "1970-12-15",
+      "landing_site": "Venus Surface",
+      "coordinates": {
+        "latitude_deg": -5.0,
+        "longitude_deg": 351.0
+      },
+      "temperature_c": 475,
+      "pressure_atm": 90,
+      "description": "Başka bir gezegenin yüzeyine başarıyla inen ve veri ileten ilk uzay aracı."
+    },
+    {
+      "id": "venera_9",
+      "name": "Venera 9",
+      "target": "Venus",
+      "launch_date": "1975-06-08",
+      "landing_date": "1975-10-22",
+      "landing_site": "Beta Regio",
+      "coordinates": {
+        "latitude_deg": 31.01,
+        "longitude_deg": 291.64
+      },
+      "description": "Venüs yüzeyinden Dünya'ya ilk siyah-beyaz panoramik görüntüyü ileten uzay aracı."
+    },
+    {
+      "id": "venera_13",
+      "name": "Venera 13",
+      "target": "Venus",
+      "launch_date": "1981-10-30",
+      "landing_date": "1982-03-01",
+      "landing_site": "Phoebe Regio",
+      "coordinates": {
+        "latitude_deg": -7.5,
+        "longitude_deg": 303.0
+      },
+      "description": "Venüs yüzeyinden ilk renkli panoramik görüntüleri ve ses kaydını ileten uzay aracı."
+    },
+    {
+      "id": "perseverance",
+      "name": "Perseverance",
+      "target": "Mars",
+      "launch_date": "2020-07-30",
+      "landing_date": "2021-02-18",
+      "landing_site": "Jezero Crater",
+      "coordinates": {
+        "latitude_deg": 18.38,
+        "longitude_deg": 77.58
+      },
+      "description": "Mars'ta Jezero kraterinde antik mikrobiyal yaşam izleri arayan keşif aracı."
+    },
+    {
+      "id": "hubble",
+      "name": "Hubble Uzay Teleskobu",
+      "target": "Low Earth Orbit",
+      "launch_date": "1990-04-24",
+      "altitude_km": 535,
+      "velocity_kmh": 27300,
+      "orbital_period_min": 95.4,
+      "mirror_diameter_m": 2.4,
+      "instruments": [
+        "Wide Field Camera 3 (WFC3)",
+        "Cosmic Origins Spectrograph (COS)",
+        "Advanced Camera for Surveys (ACS)",
+        "Space Telescope Imaging Spectrograph (STIS)"
+      ],
+      "famous_discoveries": [
+        "Yaratılış Sütunları (Pillars of Creation)",
+        "Hubble Derin Alan (Hubble Ultra Deep Field)",
+        "Evrenin genişleme hızının ve yaşının (~13.8 milyar yıl) hesaplanması",
+        "Ötegezegen atmosferlerinde su buharı tespiti"
+      ],
+      "description": "Dünya atmosferinin engelleyici etkilerinden uzakta, 1990'dan beri derin uzayı gözlemleyen efsanevi uzay teleskobu."
+    },
+    {
+      "id": "jwst",
+      "name": "James Webb Uzay Teleskobu (JWST)",
+      "target": "Sun-Earth L2 Lagrange Noktası",
+      "launch_date": "2021-12-25",
+      "distance_from_earth_km": 1500000,
+      "mirror_diameter_m": 6.5,
+      "operating_temperature_c": -233,
+      "instruments": [
+        "NIRCam (Near-Infrared Camera)",
+        "NIRSpec (Near-Infrared Spectrograph)",
+        "MIRI (Mid-Infrared Instrument)",
+        "FGS/NIRISS"
+      ],
+      "famous_discoveries": [
+        "Büyük Patlama'dan 300 milyon yıl sonraki en erken galaksilerin keşfi",
+        "Ötegezegenlerde (WASP-96b, K2-18b) karbondioksit ve su buharı tespiti",
+        "Yaratılış Sütunları ve Karina Bulutsusu'nun derin kızılötesi haritası",
+        "Erken evrendeki süper kütleli kara deliklerin oluşum izleri"
+      ],
+      "description": "Hubble'ın halefi olan, Dünya'dan 1.5 milyon km uzakta L2 noktasında evrenin ilk ışıklarını inceleyen insanlık tarihinin en güçlü uzay teleskobu."
+    }
+  ],
+  "planets": {
+    "mercury": {
+      "name": "Merkür",
+      "gravity_ms2": 3.7,
+      "radius_km": 2439.7,
+      "mass_kg": "3.3011e23",
+      "day_length_hours": 4222.6,
+      "year_length_days": 88.0,
+      "mean_temp_c": 167,
+      "distance_from_sun_km": 57900000,
+      "moons_count": 0,
+      "atmosphere_summary": "Çok ince (oksijen, sodyum, hidrojen ekzosferi)"
+    },
+    "venus": {
+      "name": "Venüs",
+      "gravity_ms2": 8.87,
+      "radius_km": 6051.8,
+      "mass_kg": "4.8675e24",
+      "day_length_hours": 2802.0,
+      "year_length_days": 224.7,
+      "mean_temp_c": 464,
+      "distance_from_sun_km": 108200000,
+      "moons_count": 0,
+      "atmosphere_summary": "Yoğun karbondioksit ve sülfürik asit bulutları, 92 bar basınç"
+    },
+    "earth": {
+      "name": "Dünya",
+      "gravity_ms2": 9.807,
+      "radius_km": 6371.0,
+      "mass_kg": "5.972e24",
+      "day_length_hours": 24.0,
+      "year_length_days": 365.25,
+      "mean_temp_c": 15,
+      "distance_from_sun_km": 149600000,
+      "moons_count": 1,
+      "atmosphere_summary": "%78 Azot, %21 Oksijen, %1 Argon ve diğer gazlar"
+    },
+    "moon": {
+      "name": "Ay",
+      "gravity_ms2": 1.62,
+      "radius_km": 1737.4,
+      "mass_kg": "7.342e22",
+      "day_length_hours": 708.7,
+      "year_length_days": 27.3,
+      "mean_temp_c": -20,
+      "distance_from_sun_km": 149600000,
+      "moons_count": 0,
+      "atmosphere_summary": "Atmosfer yok denecek kadar az (ekzosfer)"
+    },
+    "mars": {
+      "name": "Mars",
+      "gravity_ms2": 3.71,
+      "radius_km": 3389.5,
+      "mass_kg": "6.4171e23",
+      "day_length_hours": 24.62,
+      "year_length_days": 687.0,
+      "mean_temp_c": -63,
+      "distance_from_sun_km": 227900000,
+      "moons_count": 2,
+      "atmosphere_summary": "İnce karbondioksit (%95), azot ve argon"
+    },
+    "jupiter": {
+      "name": "Jüpiter",
+      "gravity_ms2": 24.79,
+      "radius_km": 69911.0,
+      "mass_kg": "1.8982e27",
+      "day_length_hours": 9.93,
+      "year_length_days": 4332.6,
+      "mean_temp_c": -110,
+      "distance_from_sun_km": 778500000,
+      "moons_count": 95,
+      "atmosphere_summary": "Dev gaz devi: Hidrojen ve Helyum, şiddetli fırtınalar"
+    },
+    "saturn": {
+      "name": "Satürn",
+      "gravity_ms2": 10.44,
+      "radius_km": 58232.0,
+      "mass_kg": "5.6834e26",
+      "day_length_hours": 10.7,
+      "year_length_days": 10759.2,
+      "mean_temp_c": -140,
+      "distance_from_sun_km": 1433500000,
+      "moons_count": 146,
+      "atmosphere_summary": "Hidrojen ve Helyum, görkemli buz ve kaya halkaları"
+    }
+  },
+  "light_delay_targets": {
+    "moon": { "name": "Ay", "distance_km": 384400, "delay_s": 1.28, "risk_level": "LOW" },
+    "mars": { "name": "Mars", "distance_km": 225000000, "delay_s": 750.5, "risk_level": "MEDIUM" },
+    "sun": { "name": "Güneş", "distance_km": 149597870, "delay_s": 499.0, "risk_level": "MEDIUM" },
+    "jupiter": { "name": "Jüpiter", "distance_km": 778500000, "delay_s": 2596.8, "risk_level": "HIGH" },
+    "saturn": { "name": "Satürn", "distance_km": 1433500000, "delay_s": 4781.6, "risk_level": "HIGH" },
+    "voyager_1": { "name": "Voyager 1", "distance_km": 25892000000, "delay_s": 86366.5, "risk_level": "HIGH" }
+  }
+}

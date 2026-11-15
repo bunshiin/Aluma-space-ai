@@ -1,0 +1,79 @@
+/* Pop-up penceresi: Windows'taki küçültülmüş uygulama penceresi gibi sahnenin üstünde serbest durur.
+   Arka plan karartılmaz; pencere başlık çubuğundan sürüklenir (popupWindow.js). */
+
+.ag-popup-container { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+
+.ag-popup-dialog {
+  position: absolute; left: 2rem; top: 5rem; pointer-events: auto;
+  /* Alttaki altyazı ve sorgu kutusuna uzanmasın diye ekran yüksekliğinden pay bırakılır */
+  width: min(25rem, calc(100vw - 2rem)); height: min(calc(100vh - 16rem), 46rem);
+  display: flex; flex-direction: column; overflow: hidden; padding: 0;
+  font-family: "Inter", "Space Grotesk", system-ui, sans-serif;
+}
+.ag-popup-dialog.is-wide { width: min(62rem, calc(100vw - 2rem)); height: min(calc(100vh - 16rem), 40rem); }
+.ag-popup-dialog.is-minimized { height: auto; }
+.ag-popup-dialog.is-minimized .ag-popup-content { display: none; }
+.ag-popup-dialog.is-dragging { opacity: 0.92; user-select: none; }
+
+.ag-popup-titlebar {
+  flex: none; display: flex; align-items: center; gap: 0.35rem; padding: 0.55rem 0.6rem 0.55rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08); background-color: rgba(15, 23, 42, 0.85);
+  cursor: grab; touch-action: none;
+}
+.ag-popup-dialog.is-dragging .ag-popup-titlebar { cursor: grabbing; }
+.ag-popup-title {
+  flex: 1; min-width: 0; margin: 0; font-size: 0.86rem; font-weight: 600; color: #f8fafc;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ag-window-btn {
+  flex: none; width: 1.9rem; height: 1.9rem; border-radius: 0.5rem; border: 1px solid transparent;
+  background: transparent; color: #94a3b8; font-size: 1.05rem; line-height: 1; cursor: pointer;
+}
+.ag-window-btn:hover { background-color: rgba(148, 163, 184, 0.16); color: #f8fafc; }
+.ag-window-close:hover { background-color: #dc2626; color: #fff; }
+
+.ag-popup-content {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 0.75rem;
+  display: flex; flex-direction: column; gap: 0.85rem;
+  scrollbar-width: thin; scrollbar-color: rgba(148, 178, 255, 0.25) transparent;
+}
+/* Geniş pencere: solda görsel, sağda bilgi */
+.ag-popup-dialog.is-wide .ag-popup-content { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+.ag-popup-dialog.is-wide .ag-popup-media { position: sticky; top: 0; }
+
+.ag-popup-media { width: 100%; }
+.ag-popup-media .ag-popup-image { max-height: 22rem; border-radius: 0.75rem; }
+.ag-popup-dialog.is-wide .ag-popup-media .ag-popup-image { max-height: min(62vh, 32rem); }
+
+.ag-popup-info { display: flex; flex-direction: column; gap: 0.8rem; color: #cbd5e1; }
+.ag-popup-description { margin: 0; font-size: 0.92rem; line-height: 1.6; color: #e2e8f0; }
+.ag-popup-facts {
+  margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border-radius: 0.75rem; overflow: hidden;
+  background-color: rgba(148, 178, 255, 0.12); border: 1px solid rgba(148, 178, 255, 0.12);
+}
+.ag-popup-fact { margin: 0; padding: 0.55rem 0.7rem; background-color: rgba(14, 20, 38, 0.92); }
+.ag-popup-fact-label { font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; }
+.ag-popup-fact-value { margin: 0.25rem 0 0; font-size: 0.85rem; font-weight: 500; color: #f1f5f9; }
+.ag-popup-section { padding: 0.7rem 0.85rem; border-radius: 0.75rem; background-color: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.14); }
+.ag-popup-section-title { margin: 0 0 0.35rem; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: #38bdf8; }
+.ag-popup-section-body { margin: 0; font-size: 0.88rem; line-height: 1.55; }
+.ag-popup-credit { margin: 0; font-size: 0.72rem; color: #64748b; }
+
+@media (max-width: 760px) {
+  .ag-popup-dialog.is-wide .ag-popup-content { display: flex; }
+}
+
+/* Altyazı: konuşma metni panel yerine şeffaf zeminde, sorgu kutusunun hemen üstünde okunur.
+   Arka plan yok; okunabilirlik koyu gölgeyle sağlanır. Tıklamaları sahneye geçirir. */
+.ag-subtitle {
+  position: absolute; left: 50%; bottom: 6.4rem; z-index: 18; transform: translateX(-50%);
+  width: min(54rem, calc(100vw - 3rem)); margin: 0; padding: 0 1rem; box-sizing: border-box;
+  text-align: center; pointer-events: none;
+  font: 500 1.15rem/1.55 "Inter", "Space Grotesk", system-ui, sans-serif; letter-spacing: 0.005em; color: #fff;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.95), 0 1px 3px rgba(0, 0, 0, 0.95), 0 2px 14px rgba(0, 0, 0, 0.85), 0 0 28px rgba(0, 0, 0, 0.6);
+  opacity: 0; transition: opacity 0.35s ease;
+}
+.ag-subtitle.is-visible { opacity: 1; }
+@media (max-width: 760px) {
+  .ag-subtitle { bottom: 5.6rem; font-size: 1rem; }
+}
