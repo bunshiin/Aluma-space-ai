@@ -6,7 +6,6 @@ import {
   FALLBACK_ASTEROIDS,
   SOLAR_BODY_NAME_REGEX,
   applyComparisonEnrichment,
-  isHomeworkIntent,
   resolveFallbackActionType,
   resolveFallbackSceneParams
 } from "./routeFallbackParser.js";
@@ -129,11 +128,6 @@ export async function enrichRoutePayload(routeJson, contracts = {}, rawQuery = "
     return { action_type: "RESET_VIEW", template_id: "NONE", parameters: {}, speech_text: "", is_student_mode: false };
   }
   const normalized = normalizeGeminiRoute(routeJson, rawQuery);
-  // Ödeve ekleme sahne açmaz: karşılaştırma/odak/veri zenginleştirmesi yapılmadan sadece konu metni taşınır
-  if (normalized.action_type === "ADD_TO_HOMEWORK") {
-    const query = String(rawQuery || normalized.parameters.query || normalized.parameters.title || "").trim();
-    return { ...normalized, template_id: "NONE", parameters: query ? { query } : {} };
-  }
   // Genel soru: Güneş Sistemi'nde odak/sahne seçimi yapılmaz, sadece geniş bilgi penceresi açılır
   if (normalized.parameters.is_general_question === true && !Array.isArray(normalized.parameters.events)) {
     const { model_url: _m, modelUrl: _u, camera_target: _c, ...infoParams } = normalized.parameters;
@@ -255,8 +249,7 @@ export function createContractBridge(options = {}) {
       doc: options.doc ?? null, create3DMissionScene: activeContracts.create3DMissionScene ?? null,
       renderProceduralPlanet: activeContracts.renderProceduralPlanet ?? null, calculateLightDelay: activeContracts.calculateLightDelay ?? null,
       onHomeworkAdded: options.onHomeworkAdded ?? null, onExportPdf: options.onExportPdf ?? null,
-      onSpeechText: options.onSpeechText ?? null, onSidePanelAction: (item) => handleSidePanelAction(item),
-      onStudentAction: options.onStudentAction ?? null, onStudentModeChange: options.onStudentModeChange ?? null
+      onSpeechText: options.onSpeechText ?? null, onSidePanelAction: (item) => handleSidePanelAction(item)
     });
   }
 
@@ -266,10 +259,6 @@ export function createContractBridge(options = {}) {
     const trimmed = String(rawText || "").trim();
     if (!trimmed) return null;
     currentStudentMode = Boolean(isStudentMode);
-    if (isHomeworkIntent(trimmed)) {
-      // "Ay yerçekimini ödevime ekle": Gemini sahne seçmesin diye niyet yerelde yakalanır, aktif sahne korunur
-      return { action_type: "ADD_TO_HOMEWORK", template_id: "NONE", parameters: { query: trimmed }, speech_text: "", is_student_mode: currentStudentMode };
-    }
     let routeJson = null;
     if (typeof activeContracts.getRouteFromGemini === "function") {
       try { routeJson = await activeContracts.getRouteFromGemini(trimmed, currentStudentMode); } catch (err) { console.warn("Gemini yönlendirici hatası:", err); }
