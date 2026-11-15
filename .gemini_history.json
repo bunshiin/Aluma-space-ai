@@ -78,5 +78,13 @@
   {
     "role": "model",
     "text": "Dünya ile Mars arasındaki mesafe, gezegenlerin yörüngelerindeki hareketlerine bağlı olarak elli dört milyon kilometre ile dörtyüz bir milyon kilometre arasında değişir. Ortalama mesafe iki yüz yirmi beş milyon kilometre olup, ışık hızıyla bu mesafe yaklaşık on iki buçuk dakikada kat edilir."
+  },
+  {
+    "role": "user",
+    "text": "Uluslararası Uzay istasyonunun"
+  },
+  {
+    "role": "model",
+    "text": "Uluslararası Uzay İstasyonu, Dünya alçak yörüngesinde yaklaşık 418 kilometre yükseklikte saatte 27 bin 600 kilometre hızla hareket eden dev bir araştırma laboratuvarıdır."
   }
 ]
