@@ -61,6 +61,7 @@ function enrichWithNasaContext(sanitized, spaceDataContext, hasCustomClient, det
   if (detectedCategory?.queryType === "comparison") {
     sanitized.action_type = "SHOW_COMPARISON";
     sanitized.template_id = "NONE";
+    delete sanitized.parameters.is_general_question;
     const parts = String(detectedCategory.identifier || "").split("_vs_");
     if (parts.length === 2) {
       if (!sanitized.parameters.primary_object) {

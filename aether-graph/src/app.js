@@ -74,20 +74,6 @@ function togglePressedState(buttonEl) {
   buttonEl.setAttribute("aria-pressed", String(nextActive));
 }
 
-function cycleHudSize(hudEl) {
-  if (!hudEl) return;
-  if (!hudEl.classList.contains("is-expanded") && !hudEl.classList.contains("is-minimized")) {
-    hudEl.classList.add("is-expanded");
-    return;
-  }
-  if (hudEl.classList.contains("is-expanded")) {
-    hudEl.classList.remove("is-expanded");
-    hudEl.classList.add("is-minimized");
-    return;
-  }
-  hudEl.classList.remove("is-minimized");
-}
-
 function hasAsyncContracts(c) {
   return Boolean(c?.getRouteFromGemini || c?.getSpaceData || c?.statesData || c?.stateMachine);
 }
@@ -100,7 +86,6 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
 
   const homeworkKeys = new Set();
   const byId = (id) => doc.getElementById(id);
-  const hudEl = byId("hud-container");
   const settingsPanelEl = byId("settings-panel");
   const settingsToggleBtn = byId("settings-toggle-button");
   const studentToggleBtn = byId("student-mode-toggle");
@@ -209,7 +194,6 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
     togglePressedState(ttsToggleBtn);
     voice.setEnabled(ttsToggleBtn.classList.contains("is-active"));
   });
-  byId("hud-size-toggle")?.addEventListener("click", () => cycleHudSize(hudEl));
   byId("homework-basket-toggle")?.addEventListener("click", () => basketContainerEl?.classList.remove("is-hidden"));
   byId("close-basket-button")?.addEventListener("click", () => basketContainerEl?.classList.add("is-hidden"));
   byId("side-panel-close-button")?.addEventListener("click", () => sidePanelEl?.classList.add("is-hidden"));

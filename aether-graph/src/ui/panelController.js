@@ -199,11 +199,6 @@ export function renderSidePanel(sidePanelElements, stepData = {}, onActionSelect
       if (stepData?.light_delay) {
         appendLightDelayRows(elDoc, sidePanelElements.bodyEl, stepData.light_delay);
         hasBodyContent = true;
-      } else if (stepData?.camera_target && !stepData?.description) {
-        const grid = createEl(elDoc, "div", "ag-comparison-grid");
-        appendComparisonRow(elDoc, grid, "camera_target", stepData.camera_target);
-        sidePanelElements.bodyEl.appendChild(grid);
-        hasBodyContent = true;
       }
       if (Array.isArray(stepData?.items) && stepData.items.length > 0) {
         renderComparisonContent(elDoc, sidePanelElements.bodyEl, stepData.template_id, stepData);

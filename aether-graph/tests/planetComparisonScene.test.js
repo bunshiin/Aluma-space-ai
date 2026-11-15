@@ -1,12 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPlanetComparisonScene } from '../src/three/planetComparisonScene.js';
-import { ASTRONAUT_MODEL_URL, resolveComparisonRequest } from '../src/three/planetComparisonConfig.js';
+import { ASTRONAUT_MODEL_URL, calculateComparisonLayout, resolveComparisonRequest } from '../src/three/planetComparisonConfig.js';
+import { buildBodyLabelEntries } from '../src/three/planetComparisonLabels.js';
+import { calculatePlanetComparison } from '../src/physics/spacePhysics.js';
 import { createMockThreeDeps, createZeroCounters } from './mockThree.js';
 
 // Paket testi: sahneyi doğrudan import eder, fabrikaya bağlı değildir
 function createHarness(counters = createZeroCounters()) {
   const deps = createMockThreeDeps(counters);
+  const scenes = [];
+  const BaseScene = deps.THREE.Scene;
+  deps.THREE.Scene = class extends BaseScene {
+    constructor() {
+      super();
+      scenes.push(this);
+    }
+  };
   const urls = [];
   const BaseLoader = deps.GLTFLoader;
   deps.GLTFLoader = class extends BaseLoader {
@@ -26,7 +36,7 @@ function createHarness(counters = createZeroCounters()) {
   };
   const statuses = [];
   target.addEventListener('ag:planet-comparison-status', (event) => statuses.push(event.detail));
-  return { deps, urls, listeners, statuses, counters, dispatch: (detail) => target.dispatchEvent(new CustomEvent('ag:planet-comparison', { detail })) };
+  return { deps, scenes, urls, listeners, statuses, counters, dispatch: (detail) => target.dispatchEvent(new CustomEvent('ag:planet-comparison', { detail })) };
 }
 
 const container = () => ({ clientWidth: 1280, clientHeight: 720, appendChild() {} });
@@ -74,4 +84,25 @@ test('destroy() 10 kez aç-kapa: renderer, rAF, controls, DRACO ve dinleyiciler 
   assert.equal(counters.cancelAnimationFrame, 10);
   assert.equal(counters.controlsDispose, 10);
   assert.equal(counters.dracoDispose, 10);
+});
+
+test('Karşılaştırma sahnesi iki nesne arasında COMPARISON_DISTANCE_LINE ve DISTANCE etiketi kurar', async () => {
+  const h = createHarness();
+  const handle = await createPlanetComparisonScene(container(), { primary_object: 'EARTH', secondary_object: 'MARS' }, () => {}, h.deps);
+  const scene = h.scenes[0];
+  const distanceLine = scene.getObjectByName('COMPARISON_DISTANCE_LINE');
+  assert.ok(distanceLine, 'COMPARISON_DISTANCE_LINE sahneye eklenmiş olmalı');
+  assert.ok(distanceLine.children.length >= 6);
+
+  const comparison = calculatePlanetComparison('EARTH', 'MARS');
+  const layout = calculateComparisonLayout(comparison, 16 / 9, 45);
+  assert.ok(layout.distance_line.distance_km > 0);
+  assert.ok(layout.distance_line.end_x_units > layout.distance_line.start_x_units);
+
+  const labels = buildBodyLabelEntries(layout, comparison);
+  const distanceLabel = labels.find((entry) => entry.key === 'DISTANCE');
+  assert.ok(distanceLabel, 'DISTANCE etiketi üretilmeli');
+  assert.equal(distanceLabel.lines[0], 'MESAFE');
+  assert.match(distanceLabel.lines[1], /milyon km/);
+  handle.destroy();
 });

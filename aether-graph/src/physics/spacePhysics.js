@@ -11,7 +11,8 @@ export const MS_PER_DAY = 86400000;
 // Güneş merkezli ortalama yörünge yarıçapları (km)
 export const ORBIT_RADIUS_KM = {
   SUN: 0, MERCURY: 57909050, VENUS: 108208000, EARTH: 149597871, MARS: 227939200,
-  JUPITER: 778479000, SATURN: 1433530000, URANUS: 2870972000, NEPTUNE: 4498400000
+  JUPITER: 778479000, SATURN: 1433530000, URANUS: 2870972000, NEPTUNE: 4498400000,
+  CERES: 413700000, PLUTO: 5906380000, HAUMEA: 6452000000, MAKEMAKE: 6850000000, ERIS: 10125000000
 };
 
 // Yüzey yerçekimi ivmeleri (m/s^2)
@@ -38,9 +39,12 @@ export const ORBITAL_PERIOD_DAYS = {
   CERES: 1680, PLUTO: 90560, HAUMEA: 103410, MAKEMAKE: 111845, ERIS: 203830
 };
 
-// Uydunun Güneş etrafındaki yılı, bağlı olduğu gezegenin yılıdır
+// Uydunun Güneş etrafındaki yılı ve merkez mesafesi bağlı olduğu gezegene göre çözülür
 const SATELLITE_PARENT = {
   MOON: 'EARTH', IO: 'JUPITER', EUROPA: 'JUPITER', GANYMEDE: 'JUPITER', CALLISTO: 'JUPITER', TITAN: 'SATURN', TRITON: 'NEPTUNE'
+};
+const SATELLITE_DISTANCE_KM = {
+  MOON: EARTH_MOON_DISTANCE_KM, IO: 421700, EUROPA: 671100, GANYMEDE: 1070400, CALLISTO: 1882700, TITAN: 1221870, TRITON: 354759
 };
 
 const SCENE_SCALE_PER_KM = 1e-6; // Km -> Three.js sahne birimi çarpanı tek yerde tutulur
@@ -68,21 +72,15 @@ function resolveComparisonKey(name, fallbackKey) {
 }
 
 function getDistanceBetweenBodies_km(sourceKey, targetKey) {
-  if (!sourceKey || !targetKey || sourceKey === targetKey) {
-    return 0;
+  if (!sourceKey || !targetKey || sourceKey === targetKey) return 0;
+  if (SATELLITE_PARENT[sourceKey] === targetKey) return SATELLITE_DISTANCE_KM[sourceKey] || 0;
+  if (SATELLITE_PARENT[targetKey] === sourceKey) return SATELLITE_DISTANCE_KM[targetKey] || 0;
+  if (SATELLITE_PARENT[sourceKey] && SATELLITE_PARENT[sourceKey] === SATELLITE_PARENT[targetKey]) {
+    return Math.abs((SATELLITE_DISTANCE_KM[targetKey] || 0) - (SATELLITE_DISTANCE_KM[sourceKey] || 0));
   }
-  if ((sourceKey === 'EARTH' && targetKey === 'MOON') || (sourceKey === 'MOON' && targetKey === 'EARTH')) {
-    return EARTH_MOON_DISTANCE_KM;
-  }
-
-  // Ay, Güneş'e uzaklık hesabında Dünya ile aynı heliosentrik yarıçapta kabul edilir
-  const srcRadius = sourceKey === 'MOON' ? ORBIT_RADIUS_KM.EARTH : ORBIT_RADIUS_KM[sourceKey];
-  const tgtRadius = targetKey === 'MOON' ? ORBIT_RADIUS_KM.EARTH : ORBIT_RADIUS_KM[targetKey];
-
-  if (typeof srcRadius !== 'number' || typeof tgtRadius !== 'number') {
-    return 0;
-  }
-  return Math.abs(tgtRadius - srcRadius);
+  const srcRadius = ORBIT_RADIUS_KM[SATELLITE_PARENT[sourceKey] || sourceKey];
+  const tgtRadius = ORBIT_RADIUS_KM[SATELLITE_PARENT[targetKey] || targetKey];
+  return typeof srcRadius === 'number' && typeof tgtRadius === 'number' ? Math.abs(tgtRadius - srcRadius) : 0;
 }
 
 /**
@@ -204,7 +202,8 @@ export function calculatePlanetComparison(primary_object, secondary_object, opti
     // Güneş/Plüton gibi uç oranlarda ondalık kaybolmasın diye anlamlı basamakla yuvarlanır
     radius_ratio: Number((BODY_RADIUS_KM[primary] / BODY_RADIUS_KM[secondary]).toPrecision(6)),
     primary_gravity_ms2: primaryGravity_ms2, secondary_gravity_ms2: secondaryGravity_ms2,
-    gravity_ratio: Number((primaryGravity_ms2 / secondaryGravity_ms2).toPrecision(6))
+    gravity_ratio: Number((primaryGravity_ms2 / secondaryGravity_ms2).toPrecision(6)),
+    distance_km: getDistanceBetweenBodies_km(primary, secondary)
   };
   if (isPositiveNumber(opts.mass_kg)) {
     result.mass_kg = opts.mass_kg;

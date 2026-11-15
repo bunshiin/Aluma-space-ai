@@ -241,10 +241,12 @@ export function createViewportController(config = {}) {
         ? parameters?.camera_target || parameters?.target || "EARTH"
         : parameters?.camera_target || (isFocusAction ? parameters?.target || "DEFAULT" : null);
 
+    let isCameraTransitioning = false;
     if (isAsteroidRoute) {
       const neoDetail = routePayload || { action_type: actionType, template_id: templateId, parameters };
       state.camera_target = cameraTarget;
       config.sceneContainer?.setAttribute?.("data-camera-target", cameraTarget);
+      isCameraTransitioning = Boolean(activeScene) || isSceneLoading || Boolean(scenePromise);
       dispatchWithScene(() => {
         dispatchWindowEvent("ag:neo-data", neoDetail);
         dispatchWindowEvent("ag:focus-target", { target: cameraTarget });
@@ -254,6 +256,7 @@ export function createViewportController(config = {}) {
       state.camera_target = cameraTarget;
       config.sceneContainer?.setAttribute?.("data-camera-target", cameraTarget);
       if (!isFlareTrigger && !isSameActiveTarget) {
+        isCameraTransitioning = Boolean(activeScene) || isSceneLoading || Boolean(scenePromise);
         dispatchWithScene(() => dispatchWindowEvent("ag:focus-target", { target: cameraTarget }));
       }
     }
@@ -287,7 +290,7 @@ export function createViewportController(config = {}) {
         break;
     }
 
-    return { scene_promise: scenePromise, light_delay: state.light_delay, has_active_scene: Boolean(activeScene) || isSceneLoading };
+    return { scene_promise: scenePromise, light_delay: state.light_delay, has_active_scene: Boolean(activeScene) || isSceneLoading, is_camera_transitioning: isCameraTransitioning, camera_target: cameraTarget };
   }
 
   return { openScene, applyAction, getState: () => ({ ...state }), destroy };

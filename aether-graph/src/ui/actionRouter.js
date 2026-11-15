@@ -1,5 +1,6 @@
 // Gemini JSON çıktılarını doğrular; HUD, panel ve 3D/2D sahne kontrolcülerini koordine eder.
 
+import { cancelCameraArrival, scheduleOnCameraArrival } from "./cameraArrivalGate.js";
 import { createHudController } from "./hudController.js";
 import { closeAllPanels, renderOverlayCard, renderPopup, renderSidePanel } from "./panelController.js";
 import { createViewportController } from "./viewportController.js";
@@ -146,10 +147,20 @@ export function configureActionRouter(options = {}) {
  * Aktif 3D sahneyi temizler ve UI yönlendirici durumunu sıfırlar.
  */
 export function resetActionRouterState() {
+  cancelCameraArrival();
   viewportController?.destroy();
   viewportController?.applyAction("RESET_VIEW");
   hudController?.reset();
   closeOpenPanels();
+}
+
+function schedulePanelRender(viewportResult, renderFn) {
+  if (!viewportResult?.is_camera_transitioning) {
+    renderFn();
+    return;
+  }
+  closeOpenPanels();
+  scheduleOnCameraArrival(viewportResult.camera_target, renderFn);
 }
 
 /**
@@ -186,6 +197,8 @@ export function handleActionRouter(json) {
     };
   }
 
+  cancelCameraArrival();
+
   const baseParams = json.parameters && typeof json.parameters === "object" ? { ...json.parameters } : {};
   const parameters = enrichLightDelay(resolvedTemplateId, baseParams);
   const speechText = typeof json.speech_text === "string" ? json.speech_text : "";
@@ -210,7 +223,7 @@ export function handleActionRouter(json) {
 
   switch (rawAction) {
     case "OPEN_POPUP":
-      renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc);
+      schedulePanelRender(viewportResult, () => renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc));
       break;
     case "SPLIT_SCREEN":
       if (viewportResult.light_delay && !parameters.light_delay) {
@@ -240,7 +253,7 @@ export function handleActionRouter(json) {
     case "SHOW_FACT_CARD":
       // Fotoğraflı pop-up aynı bilgiyi zaten gösterir; karttan tekrar çizilmez
       if (parameters.supporting_photo === true && parameters.image_url) break;
-      renderOverlayCard(cachedElements?.overlayCard, rawAction, resolvedTemplateId, parameters, doc);
+      schedulePanelRender(viewportResult, () => renderOverlayCard(cachedElements?.overlayCard, rawAction, resolvedTemplateId, parameters, doc));
       break;
     case "ADD_TO_HOMEWORK":
       routerConfig.onHomeworkAdded?.({ ...parameters, template_id: resolvedTemplateId });
@@ -255,7 +268,10 @@ export function handleActionRouter(json) {
     case "EXPAND_HUD":
     case "MINIMIZE_HUD":
     case "SIMPLIFY_TEXT":
+      break;
     case "FOCUS_OBJECT":
+      closeOpenPanels();
+      break;
     case "PAN_TO":
     case "HIGHLIGHT_OBJECT":
     case "PLAY_ANIMATION":
@@ -266,7 +282,7 @@ export function handleActionRouter(json) {
   }
   // Odak/kart aksiyonlarında konunun fotoğrafı da gelir (sunucu supporting_photo ile işaretler); sahne odağı korunur
   if (rawAction !== "OPEN_POPUP" && parameters.supporting_photo === true && parameters.image_url) {
-    renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc);
+    schedulePanelRender(viewportResult, () => renderPopup(cachedElements?.popup, parameters, resolvedTemplateId, doc));
   }
 
   return {

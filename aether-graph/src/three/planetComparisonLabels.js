@@ -3,11 +3,18 @@
 import { getSurfacePalette } from './planetComparisonConfig.js';
 
 const SMALL_ACCENT_HEX = 0xfbbf24;
+const DISTANCE_LINE_HEX = 0x38bdf8;
 const LABEL_GAP_PER_CAMERA_DISTANCE = 0.025;
 const SURFACE_LABEL_Y_UNITS = -1.8;
 
 function formatRatio(value) {
   return Number(value.toPrecision(3));
+}
+
+function formatDistanceKm(distance_km) {
+  if (distance_km >= 1e9) return `${(distance_km / 1e9).toFixed(2)} milyar km`;
+  if (distance_km >= 1e6) return `${(distance_km / 1e6).toFixed(1)} milyon km`;
+  return `${Math.round(distance_km).toLocaleString('tr-TR')} km`;
 }
 
 function toCssColor(hex) {
@@ -26,10 +33,19 @@ export function buildBodyLabelEntries(layout, comparison) {
     lines: [slot.body_id, `${Math.round(radius_km)} km`, `${formatRatio(relative)}× ${otherId}`],
     accent_hex: slot.has_marker ? SMALL_ACCENT_HEX : getSurfacePalette(slot.body_id).ground_hex,
   });
-  return [
+  const entries = [
     createEntry('PRIMARY', layout.primary, comparison.primary_radius_km, ratio, comparison.secondary_object),
     createEntry('SECONDARY', layout.secondary, comparison.secondary_radius_km, 1 / ratio, comparison.primary_object),
   ];
+  if (layout?.distance_line && comparison?.distance_km > 0) {
+    entries.push({
+      key: 'DISTANCE',
+      position_units: [layout.distance_line.mid_x_units, 0.25, 0],
+      lines: ['MESAFE', formatDistanceKm(comparison.distance_km)],
+      accent_hex: DISTANCE_LINE_HEX,
+    });
+  }
+  return entries;
 }
 
 /**
@@ -131,7 +147,8 @@ export function createComparisonLabels(THREE, container, camera) {
       if (!isVisible) return;
       const x_px = (point.x * 0.5 + 0.5) * width_px;
       const y_px = (-point.y * 0.5 + 0.5) * height_px;
-      element.style.transform = `translate(${x_px.toFixed(1)}px, ${y_px.toFixed(1)}px) translate(-50%, 0)`;
+      const yOffset = entry.key === 'DISTANCE' ? '-100%' : '0';
+      element.style.transform = `translate(${x_px.toFixed(1)}px, ${y_px.toFixed(1)}px) translate(-50%, ${yOffset})`;
     });
   }
 

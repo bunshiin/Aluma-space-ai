@@ -212,7 +212,12 @@ export function detectNasaQueryCategory(promptText) {
     };
   }
 
-  if (["karşılaştır", "kıyasla", "vs", "hangisi daha büyük", "farkı ne"].some((kw) => hasKeyword(t, kw))) {
+  const hasDistanceComparison =
+    findMentionedCelestialObjects(t).length >= 2 &&
+    ["mesafe", "uzaklık", "uzaklik"].some((kw) => hasKeyword(t, kw)) &&
+    !["ışık", "isik", "gecikme", "sinyal", "haberleşme", "haberlesme"].some((kw) => hasKeyword(t, kw));
+
+  if (["karşılaştır", "kıyasla", "vs", "hangisi daha büyük", "farkı ne"].some((kw) => hasKeyword(t, kw)) || hasDistanceComparison) {
     const compId = resolveComparisonIdentifier(promptText);
     return {
       queryType: "comparison",

@@ -234,3 +234,35 @@ test('Gezegen arkasında kalan (occluded) nesne seçilmez, öndeki gezegen seçi
   controller.destroyCameraController();
   assert.equal(domElement.style.cursor, '', 'Destroy sonrası imleç sıfırlanmalı');
 });
+
+test('Kamera hedefe vardığında ag:focus-arrived yayınlanır, giriş kilitliyken yayınlanmaz', () => {
+  const { THREE } = createMockThreeDeps(createZeroCounters());
+  const camera = new THREE.PerspectiveCamera(45, 1.5, 0.1, 1000);
+  camera.position.set(0, 0, 50);
+  const marsNode = new THREE.Group();
+  marsNode.position.set(18, 0, 0);
+  const bodyMap = new Map([['MARS', marsNode]]);
+  const arrived = [];
+  const prevDispatch = globalThis.dispatchEvent;
+  globalThis.dispatchEvent = (ev) => {
+    if (ev?.type === 'ag:focus-arrived') arrived.push(ev.detail.target);
+    return true;
+  };
+
+  try {
+    const controller = createCameraController(THREE, camera, { target: new THREE.Vector3(), update() {} }, null, () => bodyMap);
+    controller.handleFocusTarget('MARS');
+    controller.handleCameraFrameUpdate(0.1);
+    assert.deepEqual(arrived, [], 'geçiş sürerken ag:focus-arrived yayınlanmamalı');
+
+    for (let i = 0; i < 60; i += 1) controller.handleCameraFrameUpdate(0.1);
+    assert.deepEqual(arrived, ['MARS'], 'varışta hedefle ag:focus-arrived yayınlanmalı');
+
+    controller.handleInputEnabled(false);
+    controller.handleFocusTarget('SUN');
+    for (let i = 0; i < 60; i += 1) controller.handleCameraFrameUpdate(0.1);
+    assert.deepEqual(arrived, ['MARS'], 'giriş kilitliyken varış yayınlanmamalı');
+  } finally {
+    globalThis.dispatchEvent = prevDispatch;
+  }
+});

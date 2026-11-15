@@ -54,9 +54,12 @@ function normalizeGeminiRoute(routeJson, rawQuery = "") {
 
 function buildLocalChatFallbackRoute(trimmed, isStudentMode) {
   const fallbackScene = resolveFallbackSceneParams(trimmed);
-  const actionType = resolveFallbackActionType(trimmed);
+  let actionType = resolveFallbackActionType(trimmed);
   const templateId = fallbackScene.template_id || (fallbackScene.flare_class ? "SOLAR_FLARE" : "NONE");
   const { template_id: _ignored, ...sceneParams } = fallbackScene;
+  if (actionType === "OPEN_SIDE_PANEL" && (sceneParams.camera_target || sceneParams.model_url) && !/yer[çc]ekimi|gravity|sahnesi/i.test(trimmed)) {
+    actionType = "FOCUS_OBJECT";
+  }
   const parameters = { query: trimmed, title: trimmed, ...sceneParams };
   if (templateId === "NEO_SWARM") {
     parameters.query_type = "neo";
@@ -149,7 +152,7 @@ export async function enrichRoutePayload(routeJson, contracts = {}, rawQuery = "
   const sceneHint = hasPhoto
     ? queryText
     : [mergedParams.camera_target, mergedParams.target_object, mergedParams.primary_object, mergedParams.target_body, mergedParams.target, mergedParams.planet, mergedParams.object, mergedParams.mission_id, mergedParams.query, mergedParams.title].filter((v) => typeof v === "string" && v.trim()).join(" ");
-  const nextAction = applyComparisonEnrichment(normalized, mergedParams, sceneHint, templateId);
+  let nextAction = applyComparisonEnrichment(normalized, mergedParams, sceneHint, templateId);
   if (nextAction === "SHOW_COMPARISON" && mergedParams.is_gravity_test && templateId === "NONE") templateId = "GRAVITY_SIM";
   // Gemini'nin seçtiği hedef önce tek başına çözülür; soru metnindeki başka cisim ("Güneş'te") onu ezmesin
   // Ama kullanıcı tekil bir 3D modeli açıkça adlandırdıysa ("astronot kıyafetini göster") o model açılır
@@ -185,6 +188,13 @@ export async function enrichRoutePayload(routeJson, contracts = {}, rawQuery = "
     if (!mergedParams.image_url) mergedParams.image_url = imgItems[0].image_url || imgItems[0].hd_image_url || imgItems[0].hdurl || imgItems[0].url;
     if (!mergedParams.description && (imgItems[0].explanation || imgItems[0].description)) mergedParams.description = imgItems[0].explanation || imgItems[0].description;
     if (!mergedParams.title && imgItems[0].title) mergedParams.title = imgItems[0].title;
+  }
+
+  const hasPanelContent = Boolean(stepData || mergedParams.description || mergedParams.light_delay
+    || (Array.isArray(mergedParams.items) && mergedParams.items.length > 0)
+    || (Array.isArray(mergedParams.next_actions) && mergedParams.next_actions.length > 0));
+  if (nextAction === "OPEN_SIDE_PANEL" && !hasPanelContent && (mergedParams.camera_target || mergedParams.model_url || mergedParams.modelUrl) && !/yer[çc]ekimi|gravity|sahnesi/i.test(queryText)) {
+    nextAction = "FOCUS_OBJECT";
   }
 
   const hasImage = Boolean(mergedParams.image_url || mergedParams.hd_image_url || mergedParams.hdurl || mergedParams.url) || (Array.isArray(mergedParams.images) && mergedParams.images.length > 0);

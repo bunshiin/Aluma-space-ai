@@ -449,3 +449,22 @@ test("enrichRoutePayload Gemini zengin içerik verdiyse yönlendirme alanların�
   assert.equal(labels.includes("target_object"), false);
   assert.equal(labels.includes("image_query"), false);
 });
+
+test("apollo 11 gibi odak komutları boş görev yan paneli açmaz, FOCUS_OBJECT ile kamerayı odaklar", async () => {
+  resetActionRouterState();
+  const doc = createMockDom();
+  const bridge = createContractBridge({ doc, contracts: {} });
+
+  const localRes = await bridge.dispatchUserCommand("apollo 11", false);
+  assert.equal(localRes.action_type, "FOCUS_OBJECT");
+  assert.equal(doc.getElementById("side-panel-container").classList.contains("is-hidden"), true);
+  assert.equal(doc.getElementById("scene-container").getAttribute("data-camera-target"), "APOLLO_LUNAR_MODULE");
+
+  const enrichedEmptySidePanel = await enrichRoutePayload({
+    action_type: "OPEN_SIDE_PANEL",
+    template_id: "NONE",
+    parameters: { title: "apollo 11", query: "apollo 11", camera_target: "APOLLO_LUNAR_MODULE", model_url: "SOLAR_SYSTEM" },
+    speech_text: "Apollo 11 ay modülü odaklandı."
+  }, {}, "apollo 11");
+  assert.equal(enrichedEmptySidePanel.action_type, "FOCUS_OBJECT");
+});
