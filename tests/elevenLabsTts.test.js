@@ -84,10 +84,19 @@ describe("elevenLabsTts", () => {
     assert.equal(getElevenLabsFailure(), null);
   });
 
-  it("gerçek yetki hatası (401, kota değil) UNAUTHORIZED olarak ayrılır; başarı hatayı temizler", async () => {
+  it("gerçek yetki hatası (401 veya 400 api_key_id, kota değil) UNAUTHORIZED olarak ayrılır; başarı hatayı temizler", async () => {
     const bad = async () => ({ ok: false, status: 401, json: async () => ({ detail: { code: "invalid_api_key" } }) });
     assert.equal(await createElevenLabsAudio("Yetkisiz.", { env: ENV, fetchFn: bad }), null);
     assert.equal(getElevenLabsFailure(), TTS_FAILURE.UNAUTHORIZED);
+
+    const keyIdError = async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({ detail: { type: "authentication_error", code: "invalid_api_key", status: "api_key_id_used_as_api_key" } })
+    });
+    assert.equal(await createElevenLabsAudio("Key ID hatası.", { env: ENV, fetchFn: keyIdError }), null);
+    assert.equal(getElevenLabsFailure(), TTS_FAILURE.UNAUTHORIZED);
+
     await createElevenLabsAudio("Başarılı.", { env: ENV, fetchFn: async () => createAudioResponse(200) });
     assert.equal(getElevenLabsFailure(), null);
   });

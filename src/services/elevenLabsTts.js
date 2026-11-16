@@ -29,7 +29,7 @@ const PLACEHOLDER_KEY = "your_elevenlabs_api_key";
 // ELEVENLABS_API_KEYS (virgüllü liste) öncelikli; eski tek anahtar ELEVENLABS_API_KEY da listeye eklenir
 function readApiKeys(env) {
   const candidates = [...String(env.ELEVENLABS_API_KEYS || "").split(","), String(env.ELEVENLABS_API_KEY || "")];
-  const keys = candidates.map((k) => k.trim()).filter((k) => k && k !== PLACEHOLDER_KEY);
+  const keys = candidates.map((k) => k.trim().replace(/^['"]|['"]$/g, "")).filter((k) => k && k !== PLACEHOLDER_KEY);
   return [...new Set(keys)];
 }
 
@@ -51,9 +51,20 @@ export function getElevenLabsFailure() {
 // ElevenLabs kota dolunca da 401 döner; asıl neden gövdedeki "code" alanındadır
 async function readFailureReason(res) {
   const body = typeof res.json === "function" ? await res.json().catch(() => null) : null;
-  const code = String(body?.detail?.code || body?.detail?.status || "");
-  if (code === "quota_exceeded") return TTS_FAILURE.QUOTA;
-  return res.status === 401 ? TTS_FAILURE.UNAUTHORIZED : TTS_FAILURE.REJECTED;
+  const detail = body?.detail;
+  const code = String(detail?.code || detail?.status || "");
+  const type = String(detail?.type || "");
+  if (code === "quota_exceeded" || code === "quota_exceeded_concurrent") return TTS_FAILURE.QUOTA;
+  if (
+    res.status === 401 ||
+    type === "authentication_error" ||
+    code === "invalid_api_key" ||
+    code === "api_key_id_used_as_api_key" ||
+    code === "invalid_api_key_length"
+  ) {
+    return TTS_FAILURE.UNAUTHORIZED;
+  }
+  return TTS_FAILURE.REJECTED;
 }
 
 export function isElevenLabsConfigured(env = process.env) {

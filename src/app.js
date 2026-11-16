@@ -192,7 +192,11 @@ export function initApp(doc = typeof document !== "undefined" ? document : null,
     onEnd: () => speechCtrl?.setSpeaking(false),
     onStop: () => speechCtrl?.setSpeaking(false),
     onUnavailable: (reason) => {
-      if (statusBadgeEl) statusBadgeEl.textContent = reason === "quota_exceeded" ? "SES_KOTASI_DOLDU" : "SES_KAPALI";
+      if (statusBadgeEl) {
+        statusBadgeEl.textContent = reason === "quota_exceeded"
+          ? "SES_KOTASI_DOLDU"
+          : (reason === "unauthorized" ? "SES_YETKISIZ" : "SES_KAPALI");
+      }
     }
   });
   speechCtrl = createSpeechController({

@@ -1,6 +1,0 @@
-{
-  "version": "0.0.1",
-  "configurations": [
-    { "name": "aether-graph", "runtimeExecutable": "npm", "runtimeArgs": ["--prefix", "aether-graph", "start"], "port": 5173 }
-  ]
-}
